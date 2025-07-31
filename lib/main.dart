@@ -1,14 +1,32 @@
 import 'package:flutter/material.dart';
-import 'package:notelance/add_folder_dialog.dart';
-import 'package:notelance/models/folder.dart';
+import 'package:notelance/add_category_dialog.dart';
+import 'package:notelance/models/category.dart';
+import 'package:notelance/notes_page.dart';
 import 'package:notelance/sqllite.dart';
 import 'package:logger/logger.dart';
 
 var logger = Logger();
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   await loadSQLite();
-  runApp(const Notelance());
+  runApp(const NotelanceApp());
+}
+
+class NotelanceApp extends StatelessWidget {
+  const NotelanceApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Notelance',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      home: const Notelance(),
+    );
+  }
 }
 
 class Notelance extends StatefulWidget {
@@ -22,50 +40,40 @@ class _NotelanceState extends State<Notelance> {
   @override
   void initState() {
     super.initState();
-    _loadFolders();
-
-    _searchController.addListener(() => _queryFolders());
+    _loadCategories();
   }
 
   final TextEditingController _searchController = TextEditingController();
 
-  List<Folder> _folders = [];
-  List<Folder> _queriedFolders = [];
+  List<Category> _categories = [];
 
-  void _queryFolders() {
-    setState(() {
-      _queriedFolders = _folders
-          .where((folder) => folder.name.toLowerCase().contains(_searchController.text.toLowerCase()))
-          .toList();
-    });
-  }
-
-  // Load folders from database
-  Future<void> _loadFolders() async {
+  // Load categories from database
+  Future<void> _loadCategories() async {
     if (database == null) return;
 
     try {
-      final List<Map<String, dynamic>> foldersFromDb = await database!.query('Folders');
+      final List<Map<String, dynamic>> categoriesFromDb = await database!.query(
+        'Categories',
+      );
       setState(() {
-        _folders = foldersFromDb
-            .map((folderJson) => Folder.fromJson(folderJson))
+        _categories = categoriesFromDb
+            .map((folderJson) => Category.fromJson(folderJson))
             .toList();
-
-        _queriedFolders = List.from(_folders);
       });
     } catch (e) {
       logger.e(e.toString());
     }
   }
 
-  void _showAddFolderDialog(BuildContext context) async {
+  void _showAddCategoryDialog(BuildContext context) async {
     await showDialog(
       context: context,
       builder: (context) {
-        return AddFolderDialog(
-          onAdded: (folder) {
-            setState(() => _folders.add(folder));
-            _queryFolders();
+        return AddCategoryDialog(
+          onAdded: (category) {
+            setState(() {
+              _categories.add(category);
+            });
           },
         );
       },
@@ -80,112 +88,44 @@ class _NotelanceState extends State<Notelance> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Notelance',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Notelance')),
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  contentPadding: EdgeInsets.only(left: 15, right: 15),
-                  floatingLabelBehavior: FloatingLabelBehavior.never,
-                  hintText: 'Cari folder...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+    return _categories.isEmpty
+        ? Scaffold(
+            appBar: AppBar(title: const Text('Notelance')),
+            body: const Center(
+              child: Text('No categories yet. Add one to get started!'),
+            ),
+            floatingActionButton: FloatingActionButton(
+              onPressed: () => _showAddCategoryDialog(context),
+              foregroundColor: Colors.white,
+              backgroundColor: Colors.orangeAccent,
+              child: const Icon(Icons.add),
+            ),
+          )
+        : DefaultTabController(
+            length: _categories.length,
+            child: Scaffold(
+              appBar: AppBar(
+                title: const Text('Notelance'),
+                bottom: TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  tabs: _categories
+                      .map((category) => Tab(text: category.name))
+                      .toList(),
                 ),
               ),
-            ),
-            SizedBox(
-              width: double.infinity,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Builder(
-                    builder: (context) {
-                      return ElevatedButton(
-                        onPressed: () => _showAddFolderDialog(context),
-                        child: Text('Buat Folder'),
-                      );
-                    }
-                ),
+              body: TabBarView(
+                children: _categories
+                    .map((category) => NotesPage(category: category))
+                    .toList(),
+              ),
+              floatingActionButton: FloatingActionButton(
+                onPressed: () => _showAddCategoryDialog(context),
+                foregroundColor: Colors.white,
+                backgroundColor: Colors.orangeAccent,
+                child: const Icon(Icons.add),
               ),
             ),
-            SizedBox(height: 10),
-            Expanded(
-              child: _queriedFolders.isEmpty
-                  ? Center(
-                child: Text(
-                  _folders.isEmpty
-                      ? 'Belum ada folder. Buat folder pertama Anda!'
-                      : 'Tidak ada folder yang cocok dengan pencarian.',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              )
-                  : GridView.builder(
-                padding: const EdgeInsets.all(12),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 3 / 2,
-                ),
-                itemCount: _queriedFolders.length,
-                itemBuilder: (context, index) {
-                  final folder = _queriedFolders[index];
-                  return Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () {
-                        // Handle folder tap
-                        print('Tapped folder: ${folder.name} (ID: ${folder.id})');
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.folder,
-                              size: 48,
-                              color: Theme.of(context).primaryColor,
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              folder.name,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+          );
   }
 }

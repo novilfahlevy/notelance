@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:notelance/models/folder.dart';
+import 'package:notelance/models/category.dart';
 import 'package:notelance/sqllite.dart';
 import 'package:logger/logger.dart';
 import 'package:sqflite/sqflite.dart';
 
 var logger = Logger();
 
-class AddFolderDialog extends StatefulWidget {
-  const AddFolderDialog({ super.key, required this.onAdded });
+class AddCategoryDialog extends StatefulWidget {
+  const AddCategoryDialog({ super.key, required this.onAdded });
 
-  final Function(Folder folder) onAdded;
+  final Function(Category category) onAdded;
 
   @override
-  State<AddFolderDialog> createState() => _AddFolderDialogState();
+  State<AddCategoryDialog> createState() => _AddCategoryDialogState();
 }
 
-class _AddFolderDialogState extends State<AddFolderDialog> {
+class _AddCategoryDialogState extends State<AddCategoryDialog> {
   final TextEditingController _folderNameController = TextEditingController();
   bool _isLoading = false;
 
-  Future<void> _addFolder(String folderName) async {
+  Future<void> _addCategory(String folderName) async {
     if (database == null || folderName.trim().isEmpty) return;
 
     setState(() {
@@ -28,23 +28,23 @@ class _AddFolderDialogState extends State<AddFolderDialog> {
 
     try {
       final int id = await database!.insert(
-        'Folders',
+        'Categories',
         { 'name': folderName.trim() },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      final newFolder = Folder(id: id, name: folderName.trim());
-      widget.onAdded(newFolder);
+      final newCategory = Category(id: id, name: folderName.trim());
+      widget.onAdded(newCategory);
 
-      logger.d('Folder added successfully: ${newFolder.toString()}');
+      logger.d('Category added successfully: ${newCategory.toString()}');
     } catch (e) {
-      logger.e('Error adding folder: ${e.toString()}');
+      logger.e('Error adding category: ${e.toString()}');
 
       // Show error snackbar
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Gagal menambahkan folder: ${e.toString()}'),
+            content: Text('Gagal menambahkan category: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -74,15 +74,14 @@ class _AddFolderDialogState extends State<AddFolderDialog> {
             controller: _folderNameController,
             decoration: InputDecoration(
               floatingLabelBehavior: FloatingLabelBehavior.always,
-              labelText: 'Nama folder',
-              hintText: 'Masukkan nama folder',
+              labelText: 'Nama kategori',
               enabled: !_isLoading,
             ),
             autofocus: true,
             textCapitalization: TextCapitalization.words,
             onSubmitted: (value) async {
               if (value.trim().isNotEmpty && !_isLoading) {
-                await _addFolder(value);
+                await _addCategory(value);
                 if (mounted) Navigator.pop(context);
               }
             },
@@ -102,7 +101,7 @@ class _AddFolderDialogState extends State<AddFolderDialog> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : () async {
                     if (_folderNameController.text.trim().isNotEmpty) {
-                      await _addFolder(_folderNameController.text);
+                      await _addCategory(_folderNameController.text);
                       if (mounted) Navigator.pop(context);
                     }
                   },
