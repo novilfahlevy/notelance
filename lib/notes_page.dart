@@ -13,7 +13,7 @@ class NotesPage extends StatelessWidget {
       itemCount: 3, // This should be dynamic based on actual notes
       itemBuilder: (context, index) {
         return ListTile(
-          tileColor: Colors.amber,
+          tileColor: Colors.orangeAccent,
           contentPadding: const EdgeInsets.all(16),
           title: Text(
             'Note ${index + 1} in ${category.name}',

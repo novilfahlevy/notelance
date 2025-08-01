@@ -88,44 +88,46 @@ class _NotelanceState extends State<Notelance> {
 
   @override
   Widget build(BuildContext context) {
-    return _categories.isEmpty
-        ? Scaffold(
-            appBar: AppBar(title: const Text('Notelance')),
-            body: const Center(
-              child: Text('No categories yet. Add one to get started!'),
-            ),
-            floatingActionButton: FloatingActionButton(
-              onPressed: () => _showAddCategoryDialog(context),
-              foregroundColor: Colors.white,
-              backgroundColor: Colors.orangeAccent,
-              child: const Icon(Icons.add),
-            ),
-          )
-        : DefaultTabController(
-            length: _categories.length,
-            child: Scaffold(
-              appBar: AppBar(
-                title: const Text('Notelance'),
-                bottom: TabBar(
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  tabs: _categories
-                      .map((category) => Tab(text: category.name))
-                      .toList(),
-                ),
-              ),
-              body: TabBarView(
-                children: _categories
-                    .map((category) => NotesPage(category: category))
-                    .toList(),
-              ),
-              floatingActionButton: FloatingActionButton(
-                onPressed: () => _showAddCategoryDialog(context),
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.orangeAccent,
-                child: const Icon(Icons.add),
-              ),
-            ),
-          );
+    if (_categories.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Notelance')),
+        body: const Center(
+          child: Text('No categories yet. Add one to get started!'),
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _showAddCategoryDialog(context),
+          foregroundColor: Colors.white,
+          backgroundColor: Colors.orangeAccent,
+          child: const Icon(Icons.add),
+        ),
+      );
+    }
+    
+    return DefaultTabController(
+      length: _categories.length,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Notelance'),
+          bottom: TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: _categories
+                .map((category) => Tab(text: category.name))
+                .toList(),
+          ),
+        ),
+        body: TabBarView(
+          children: _categories
+              .map((category) => NotesPage(category: category))
+              .toList(),
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _showAddCategoryDialog(context),
+          foregroundColor: Colors.white,
+          backgroundColor: Colors.orangeAccent,
+          child: const Icon(Icons.add),
+        ),
+      ),
+    );
   }
 }
