@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:notelance/add_category_dialog.dart';
 import 'package:notelance/models/category.dart';
+import 'package:notelance/note_editor_page.dart';
 import 'package:notelance/notes_page.dart';
 import 'package:notelance/sqllite.dart';
 import 'package:logger/logger.dart';
+
+import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 var logger = Logger();
 
@@ -20,17 +23,32 @@ class NotelanceApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Notelance',
+      debugShowCheckedModeBanner: false,
+
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const Notelance(),
+
+      routes: {
+        Notelance.path: (context) => Notelance(),
+        NoteEditorPage.path: (context) => NoteEditorPage()
+      },
+
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        FlutterQuillLocalizations.delegate,
+      ]
     );
   }
 }
 
 class Notelance extends StatefulWidget {
   const Notelance({super.key});
+
+  static final String path = '/';
 
   @override
   State<Notelance> createState() => _NotelanceState();
@@ -65,19 +83,8 @@ class _NotelanceState extends State<Notelance> {
     }
   }
 
-  void _showAddCategoryDialog(BuildContext context) async {
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AddCategoryDialog(
-          onAdded: (category) {
-            setState(() {
-              _categories.add(category);
-            });
-          },
-        );
-      },
-    );
+  void _openNoteEditorDialog(BuildContext context) async {
+    Navigator.pushNamed(context, NoteEditorPage.path);
   }
 
   @override
@@ -95,7 +102,7 @@ class _NotelanceState extends State<Notelance> {
           child: Text('No categories yet. Add one to get started!'),
         ),
         floatingActionButton: FloatingActionButton(
-          onPressed: () => _showAddCategoryDialog(context),
+          onPressed: () => _openNoteEditorDialog(context),
           foregroundColor: Colors.white,
           backgroundColor: Colors.orangeAccent,
           child: const Icon(Icons.add),
@@ -122,7 +129,7 @@ class _NotelanceState extends State<Notelance> {
               .toList(),
         ),
         floatingActionButton: FloatingActionButton(
-          onPressed: () => _showAddCategoryDialog(context),
+          onPressed: () => _openNoteEditorDialog(context),
           foregroundColor: Colors.white,
           backgroundColor: Colors.orangeAccent,
           child: const Icon(Icons.add),

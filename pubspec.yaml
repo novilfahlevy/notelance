@@ -39,6 +39,7 @@ dependencies:
   sqflite_common_ffi: ^2.3.6
   sqlite3_flutter_libs: ^0.5.37
   logger: ^2.6.1
+  flutter_quill: ^11.4.2
 
 dev_dependencies:
   flutter_test:
