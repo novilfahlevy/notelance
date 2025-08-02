@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:delta_to_html/delta_to_html.dart';
 
 class NoteEditorPage extends StatefulWidget {
   const NoteEditorPage({super.key});
@@ -11,7 +12,8 @@ class NoteEditorPage extends StatefulWidget {
 }
 
 class _NoteEditorPageState extends State<NoteEditorPage> {
-  final QuillController _controller = QuillController.basic();
+  final TextEditingController _titleController = TextEditingController();
+  final QuillController _contentController = QuillController.basic();
 
   bool _hasUnsavedChanges = false;
 
@@ -20,24 +22,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     super.initState();
 
     // Listen to document changes
-    _controller.document.changes.listen((event) {
+    _contentController.document.changes.listen((event) {
+      // TODO: Use this to compare the current content to the old content
+      List deltaJson = _contentController.document.toDelta().toJson();
+
       if (!_hasUnsavedChanges) {
-        setState(() {
-          _hasUnsavedChanges = true;
-        });
+        setState(() => _hasUnsavedChanges = true);
       }
     });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _titleController.dispose();
+    _contentController.dispose();
     super.dispose();
   }
 
   Future<bool> _showExitConfirmation() async {
-    // If no changes were made, allow exit without confirmation
-    if (!_hasUnsavedChanges) {
+    if (!_hasUnsavedChanges && _titleController.text.isEmpty) {
       return true;
     }
 
@@ -77,7 +80,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Catatan baru'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () async {
@@ -90,7 +92,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           actions: [
             TextButton(
               onPressed: () {
-                // TODO: Implement save functionality
+                // TODO: Implements saving logic here
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     backgroundColor: Colors.orangeAccent,
@@ -98,6 +100,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     duration: Duration(seconds: 2),
                   ),
                 );
+
+                setState(() => _hasUnsavedChanges = false);
               },
               child: const Text(
                 'Simpan',
@@ -112,16 +116,62 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                  hintText: 'Nama catatan',
+                  hintStyle: TextStyle(fontSize: 18, color: Colors.grey),
+                  border: UnderlineInputBorder(borderSide: BorderSide.none),
+                  contentPadding: EdgeInsets.all(10)
+              ),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Expanded(
+              child: QuillEditor(
+                controller: _contentController,
+                scrollController: ScrollController(),
+                config: QuillEditorConfig(
+                  placeholder: 'Tulis disini...',
+                  padding: EdgeInsets.all(10),
+                  expands: true,
+                  customStyles: DefaultStyles(
+                    paragraph: DefaultTextBlockStyle(
+                      TextStyle(fontSize: 14, color: Colors.black),
+                      HorizontalSpacing.zero,
+                      VerticalSpacing.zero,
+                      VerticalSpacing.zero,
+                      null,
+                    ),
+                    placeHolder: DefaultTextBlockStyle(
+                      TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                      HorizontalSpacing.zero,
+                      VerticalSpacing.zero,
+                      VerticalSpacing.zero,
+                      null,
+                    ),
+                  ),
+                ),
+                focusNode: FocusNode(),
+              ),
+            ),
             QuillSimpleToolbar(
-              controller: _controller,
+              controller: _contentController,
               config: const QuillSimpleToolbarConfig(
+                // Aktif
                 showBoldButton: true,
                 showItalicButton: true,
                 showUnderLineButton: true,
                 showListNumbers: true,
                 showListBullets: true,
-                showHeaderStyle: true, // Enable headers (H1, H2, H3, etc.)
-                // Hide all other buttons
+                showHeaderStyle: true,
+
+                // Nonaktif
                 showFontFamily: false,
                 showFontSize: false,
                 showStrikeThrough: false,
@@ -144,14 +194,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 showSmallButton: false,
               ),
             ),
-            Expanded(
-              child: QuillEditor.basic(
-                controller: _controller,
-                config: const QuillEditorConfig(
-                  padding: EdgeInsets.all(10)
-                ),
-              ),
-            )
           ],
         ),
       ),
