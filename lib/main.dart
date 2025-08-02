@@ -65,12 +65,11 @@ class _NotelanceState extends State<Notelance> {
 
   List<Category> _categories = [];
 
-  // Load categories from database
   Future<void> _loadCategories() async {
-    if (database == null) return;
+    if (localDatabase == null) return;
 
     try {
-      final List<Map<String, dynamic>> categoriesFromDb = await database!.query(
+      final List<Map<String, dynamic>> categoriesFromDb = await localDatabase!.query(
         'Categories',
       );
       setState(() {

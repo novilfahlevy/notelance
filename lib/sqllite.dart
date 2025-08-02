@@ -4,7 +4,7 @@ import 'package:path/path.dart';
 import 'package:logger/logger.dart';
 
 // Global database instance
-Database? database;
+Database? localDatabase;
 
 var logger = Logger();
 
@@ -22,7 +22,7 @@ Future<void> loadSQLite() async {
     var databasesPath = await getDatabasesPath();
     String path = join(databasesPath, 'main.db');
 
-    database ??= await openDatabase(
+    localDatabase ??= await openDatabase(
       path,
       version: 1,
       onCreate: (Database db, int version) async {

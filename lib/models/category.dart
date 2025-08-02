@@ -7,6 +7,12 @@ class Category {
     required this.name,
   });
 
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true; // Same instance
+    return other is Category && other.id == id && other.name == name;
+  }
+
   factory Category.fromJson(Map<String, dynamic> json) {
     return Category(
       id: json['id'] as int,

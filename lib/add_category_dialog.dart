@@ -20,14 +20,14 @@ class _AddCategoryDialogState extends State<AddCategoryDialog> {
   bool _isLoading = false;
 
   Future<void> _addCategory(String folderName) async {
-    if (database == null || folderName.trim().isEmpty) return;
+    if (localDatabase == null || folderName.trim().isEmpty) return;
 
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final int id = await database!.insert(
+      final int id = await localDatabase!.insert(
         'Categories',
         { 'name': folderName.trim() },
         conflictAlgorithm: ConflictAlgorithm.replace,
