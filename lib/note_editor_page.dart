@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:delta_to_html/delta_to_html.dart';
 import 'package:notelance/models/category.dart';
-import 'package:notelance/models/note.dart';
 import 'package:notelance/sqllite.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -16,10 +15,14 @@ class NoteEditorPage extends StatefulWidget {
 }
 
 class _NoteEditorPageState extends State<NoteEditorPage> {
+  int? id;
+
   final TextEditingController _titleController = TextEditingController();
   final QuillController _contentController = QuillController.basic();
 
   Category? _category;
+
+  List<Category> _categories = [];
 
   bool _hasUnsavedChanges = false;
 
@@ -29,81 +32,95 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   void initState() {
     super.initState();
 
+    _loadCategories();
+
     // Listen to document changes
     _contentController.document.changes.listen((event) {
       if (!_hasUnsavedChanges) {
         setState(() => _hasUnsavedChanges = true);
       }
     });
+
+    // Listen to title changes
+    _titleController.addListener(() {
+      if (!_hasUnsavedChanges) {
+        setState(() => _hasUnsavedChanges = true);
+      }
+    });
+  }
+
+  Future<void> _loadCategories() async {
+    if (localDatabase == null) return;
+
+    try {
+      final List<Map<String, dynamic>> categoriesFromDb = await localDatabase!.query(
+        'Categories',
+      );
+      setState(() {
+        _categories = categoriesFromDb
+            .map((folderJson) => Category.fromJson(folderJson))
+            .toList();
+      });
+    } catch (e) {
+      logger.e(e.toString());
+    }
   }
 
   Future<void> _showCategoriesDialog() {
-    // TODO: Load the categories from database
-    final List<Category> categories = [
-      Category(id: 1, name: 'Kategori 1'),
-      Category(id: 2, name: 'Kategori 2'),
-      Category(id: 3, name: 'Kategori 3'),
-      Category(id: 4, name: 'Kategori 4'),
-      Category(id: 5, name: 'Kategori 5'),
-      Category(id: 6, name: 'Kategori 6'),
-      Category(id: 7, name: 'Kategori 7'),
-      Category(id: 8, name: 'Kategori 8'),
-    ];
-
     Category? selectedCategory = _category;
 
     return showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, StateSetter dialogSetState) {
-            return AlertDialog(
-              contentPadding: EdgeInsets.all(20),
-              shape: BeveledRectangleBorder(),
-              content: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: 300,
-                ),
-                child: SizedBox(
-                  width: double.maxFinite,
-                  child: ListView.builder(
-                    padding: EdgeInsets.symmetric(horizontal: 0),
-                    shrinkWrap: true,
-                    itemCount: categories.length,
-                    itemBuilder: (BuildContext context, int index) {
-                      return RadioListTile<Category>(
-                        contentPadding: EdgeInsets.symmetric(horizontal: 0),
-                        title: Text(categories[index].name),
-                        value: categories[index],
-                        groupValue: selectedCategory,
-                        onChanged: (Category? value) {
-                          dialogSetState(() => selectedCategory = value);
-                        },
-                      );
-                    },
+            builder: (context, StateSetter dialogSetState) {
+              return AlertDialog(
+                contentPadding: EdgeInsets.all(20),
+                shape: BeveledRectangleBorder(),
+                content: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: 300,
                   ),
-                ),
-              ),
-              actions: <Widget>[
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      shape: BeveledRectangleBorder(),
-                      backgroundColor: Colors.orangeAccent
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: ListView.builder(
+                      padding: EdgeInsets.symmetric(horizontal: 0),
+                      shrinkWrap: true,
+                      itemCount: _categories.length,
+                      itemBuilder: (BuildContext context, int index) {
+                        return RadioListTile<Category>(
+                          contentPadding: EdgeInsets.symmetric(horizontal: 0),
+                          title: Text(_categories[index].name),
+                          value: _categories[index],
+                          groupValue: selectedCategory,
+                          onChanged: (Category? value) {
+                            dialogSetState(() => selectedCategory = value);
+                          },
+                        );
+                      },
                     ),
-                    onPressed: () {
-                      if (selectedCategory != null) {
-                        setState(() => _category = selectedCategory);
-                      }
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text('Pilih', style: TextStyle(color: Colors.white)),
                   ),
                 ),
-              ],
-            );
-          }
+                actions: <Widget>[
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                          shape: BeveledRectangleBorder(),
+                          backgroundColor: Colors.orangeAccent
+                      ),
+                      onPressed: () {
+                        if (selectedCategory != null) {
+                          setState(() => _category = selectedCategory);
+                        }
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('Pilih', style: TextStyle(color: Colors.white)),
+                    ),
+                  ),
+                ],
+              );
+            }
         );
       },
     );
@@ -111,7 +128,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   Future<void> _save() async {
     if (_category == null) {
-      // TODO: Ask to choose the category first before saves the note
+      _showCategoriesDialog();
       return;
     }
 
@@ -120,32 +137,52 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     try {
       List deltaJson = _contentController.document.toDelta().toJson();
 
-      final newNoteData = {
+      final noteData = {
         'title': _titleController.text.trim(),
         'content': DeltaToHTML.encodeJson(deltaJson),
         'category_id': _category!.id,
-        'created_at': DateTime.now(),
-        'updated_at': DateTime.now()
+        'updated_at': DateTime.now().toIso8601String()
       };
 
-      final int id = await localDatabase!.insert(
-        'Notes',
-        newNoteData,
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      int noteId;
 
-      newNoteData['id'] = id;
+      if (id == null) {
+        // Create new note
+        noteData['created_at'] = DateTime.now().toIso8601String();
 
-      final newNote = Note.fromJson(newNoteData);
+        noteId = await localDatabase!.insert(
+          'Notes',
+          noteData,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
 
-      // Log the saving
-      logger.d('Catatan berhasil disimpan: ${newNote.toString()}');
+        // Set the id when a new note has been saved,
+        // so it would not make a new one if the 'Simpan' button is pressed again.
+        // Instead, it would update the current saved note
+        setState(() => id = noteId);
+
+        logger.d('Catatan baru berhasil disimpan dengan ID: $noteId');
+      } else {
+        // Update existing note
+        noteId = id!;
+
+        await localDatabase!.update(
+          'Notes',
+          noteData,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+
+        logger.d('Catatan berhasil diperbarui dengan ID: $noteId');
+      }
+
+      noteData['id'] = noteId;
 
       // Show success snackbar
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Catatan berhasil disimpan'),
+            content: Text(id == null ? 'Catatan berhasil disimpan' : 'Catatan berhasil diperbarui'),
             backgroundColor: Colors.orangeAccent,
           ),
         );
@@ -165,7 +202,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isSaving = false);
+        setState(() {
+          _isSaving = false;
+          _hasUnsavedChanges = false;
+        });
       }
     }
   }
@@ -178,7 +218,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   Future<bool> _showExitConfirmation() async {
-    if (!_hasUnsavedChanges && _titleController.text.isEmpty) {
+    if (!_hasUnsavedChanges) {
       return true;
     }
 
@@ -210,6 +250,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       onPopInvokedWithResult: (bool didPop, Object? result) async {
         if (didPop) return;
 
+        if (!_hasUnsavedChanges) return;
+
         final bool shouldPop = await _showExitConfirmation();
 
         if (shouldPop && context.mounted) {
@@ -228,19 +270,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             },
           ),
           actions: [
+            // Category selector button
             TextButton(
-              onPressed: () {
-                // TODO: Implements saving logic here
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    backgroundColor: Colors.orangeAccent,
-                    content: Text('Catatan berhasil disimpan'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-
-                setState(() => _hasUnsavedChanges = false);
-              },
+              onPressed: _showCategoriesDialog,
+              child: Text(
+                _category != null ? _category!.name : 'Pilih Kategori',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            // Save button
+            TextButton(
+              onPressed: _save,
               child: const Text(
                 'Simpan',
                 style: TextStyle(
@@ -249,6 +292,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               ),
             ),
+            const SizedBox(width: 10,)
           ],
         ),
         body: Column(
@@ -296,18 +340,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   ),
                 ),
                 focusNode: FocusNode(),
-              ),
-            ),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                  onPressed: _showCategoriesDialog,
-                  style: ElevatedButton.styleFrom(
-                    shape: LinearBorder(),
-                    elevation: 0.0,
-                    shadowColor: Colors.transparent,
-                  ),
-                  child: Text(_category != null ? _category!.name : 'Pilih kategori')
               ),
             ),
             QuillSimpleToolbar(
