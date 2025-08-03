@@ -24,29 +24,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   List<Category> _categories = [];
 
-  bool _hasUnsavedChanges = false;
+  final String _initialTitle = '';
+  final String _initialContent = '<br>';
+
+  bool get _hasUnsavedChanges {
+    final String title = _titleController.text;
+    final content = DeltaToHTML.encodeJson(_contentController.document.toDelta().toJson());
+    return '$_initialTitle$_initialContent'.trim() != '$title$content'.trim();
+  }
 
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-
     _loadCategories();
-
-    // Listen to document changes
-    _contentController.document.changes.listen((event) {
-      if (!_hasUnsavedChanges) {
-        setState(() => _hasUnsavedChanges = true);
-      }
-    });
-
-    // Listen to title changes
-    _titleController.addListener(() {
-      if (!_hasUnsavedChanges) {
-        setState(() => _hasUnsavedChanges = true);
-      }
-    });
   }
 
   Future<void> _loadCategories() async {
@@ -202,10 +194,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isSaving = false;
-          _hasUnsavedChanges = false;
-        });
+        setState(() => _isSaving = false);
       }
     }
   }
