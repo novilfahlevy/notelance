@@ -121,7 +121,7 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
     );
   }
 
-  void _editNote(Note note) {
+  void _goToNoteEditor(Note note) {
     // Navigate to note editor with the selected note data
     Navigator.pushNamed(
       context,
@@ -149,11 +149,11 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
 
     // Find the last space before the 100 character limit
     int cutOff = 100;
-    int lastSpace = preview.lastIndexOf(' ', cutOff);
+    int lastSpaceIndex = preview.lastIndexOf(' ', cutOff);
 
     // If we found a space and it's not too close to the beginning
-    if (lastSpace > 50) {
-      return '${preview.substring(0, lastSpace)}...';
+    if (lastSpaceIndex > 50) {
+      return '${preview.substring(0, lastSpaceIndex)}...';
     } else {
       // If no suitable space found, cut at 100 characters
       return '${preview.substring(0, 100)}...';
@@ -267,7 +267,7 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
                   ),
                 ],
               ),
-              onTap: () => _editNote(note),
+              onTap: () => _goToNoteEditor(note),
             ),
           );
         },

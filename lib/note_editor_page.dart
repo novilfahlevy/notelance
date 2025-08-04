@@ -1,200 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:delta_to_html/delta_to_html.dart';
+import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
 import 'package:notelance/models/category.dart';
+import 'package:notelance/models/note.dart';
 import 'package:notelance/sqllite.dart';
 import 'package:sqflite/sqflite.dart';
 
 class NoteEditorPage extends StatefulWidget {
   const NoteEditorPage({super.key});
 
-  static final String path = '/note_editor_page';
+  static const String path = '/note_editor_page';
 
   @override
   State<NoteEditorPage> createState() => _NoteEditorPageState();
 }
 
 class _NoteEditorPageState extends State<NoteEditorPage> {
-  int? id;
+  int? _noteId;
+  bool _isInitialized = false;
 
   final TextEditingController _titleController = TextEditingController();
   final QuillController _contentController = QuillController.basic();
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _editorFocusNode = FocusNode();
 
   Category? _category;
-
   List<Category> _categories = [];
 
-  final String _initialTitle = '';
-  final String _initialContent = '<br>';
+  String _initialTitle = '';
+  int _initialContentDeltaHashCode = 0;
 
   bool get _hasUnsavedChanges {
-    final String title = _titleController.text;
-    final content = DeltaToHTML.encodeJson(_contentController.document.toDelta().toJson());
-    return '$_initialTitle$_initialContent'.trim() != '$title$content'.trim();
+    if (!_isInitialized) return false;
+
+    final String title = _titleController.text.trim();
+    final contentDeltaHashCode = _contentController.document.toDelta().hashCode;
+    return _initialTitle != title || _initialContentDeltaHashCode != contentDeltaHashCode;
   }
 
   bool _isSaving = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadCategories();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
   }
 
-  Future<void> _loadCategories() async {
-    if (localDatabase == null) return;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
 
-    try {
-      final List<Map<String, dynamic>> categoriesFromDb = await localDatabase!.query(
-        'Categories',
-      );
-      setState(() {
-        _categories = categoriesFromDb
-            .map((folderJson) => Category.fromJson(folderJson))
-            .toList();
-      });
-    } catch (e) {
-      logger.e(e.toString());
-    }
-  }
-
-  Future<void> _showCategoriesDialog() {
-    Category? selectedCategory = _category;
-
-    return showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-            builder: (context, StateSetter dialogSetState) {
-              return AlertDialog(
-                contentPadding: EdgeInsets.all(20),
-                shape: BeveledRectangleBorder(),
-                content: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: 300,
-                  ),
-                  child: SizedBox(
-                    width: double.maxFinite,
-                    child: ListView.builder(
-                      padding: EdgeInsets.symmetric(horizontal: 0),
-                      shrinkWrap: true,
-                      itemCount: _categories.length,
-                      itemBuilder: (BuildContext context, int index) {
-                        return RadioListTile<Category>(
-                          contentPadding: EdgeInsets.symmetric(horizontal: 0),
-                          title: Text(_categories[index].name),
-                          value: _categories[index],
-                          groupValue: selectedCategory,
-                          onChanged: (Category? value) {
-                            dialogSetState(() => selectedCategory = value);
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                actions: <Widget>[
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                          shape: BeveledRectangleBorder(),
-                          backgroundColor: Colors.orangeAccent
-                      ),
-                      onPressed: () {
-                        if (selectedCategory != null) {
-                          setState(() => _category = selectedCategory);
-                        }
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text('Pilih', style: TextStyle(color: Colors.white)),
-                    ),
-                  ),
-                ],
-              );
-            }
-        );
-      },
-    );
-  }
-
-  Future<void> _save() async {
-    if (_category == null) {
-      _showCategoriesDialog();
-      return;
-    }
-
-    setState(() => _isSaving = true);
-
-    try {
-      List deltaJson = _contentController.document.toDelta().toJson();
-
-      final noteData = {
-        'title': _titleController.text.trim(),
-        'content': DeltaToHTML.encodeJson(deltaJson),
-        'category_id': _category!.id,
-        'updated_at': DateTime.now().toIso8601String()
-      };
-
-      int noteId;
-
-      if (id == null) {
-        // Create new note
-        noteData['created_at'] = DateTime.now().toIso8601String();
-
-        noteId = await localDatabase!.insert(
-          'Notes',
-          noteData,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-
-        // Set the id when a new note has been saved,
-        // so it would not make a new one if the 'Simpan' button is pressed again.
-        // Instead, it would update the current saved note
-        setState(() => id = noteId);
-
-        logger.d('Catatan baru berhasil disimpan dengan ID: $noteId');
-      } else {
-        // Update existing note
-        noteId = id!;
-
-        await localDatabase!.update(
-          'Notes',
-          noteData,
-          where: 'id = ?',
-          whereArgs: [id],
-        );
-
-        logger.d('Catatan berhasil diperbarui dengan ID: $noteId');
-      }
-
-      noteData['id'] = noteId;
-
-      // Show success snackbar
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(id == null ? 'Catatan berhasil disimpan' : 'Catatan berhasil diperbarui'),
-            backgroundColor: Colors.orangeAccent,
-          ),
-        );
-      }
-    } catch (e) {
-      // Log the error
-      logger.e('Error saat menyimpan catatan: ${e.toString()}');
-
-      // Show error snackbar
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal menyimpan catatan: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
+    if (!_isInitialized) {
+      final arguments = ModalRoute.of(context)?.settings.arguments;
+      if (arguments is Note) {
+        _noteId = arguments.id;
       }
     }
   }
@@ -203,123 +64,386 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
+    _scrollController.dispose();
+    _editorFocusNode.dispose();
     super.dispose();
   }
 
-  Future<bool> _showExitConfirmation() async {
-    if (!_hasUnsavedChanges) {
-      return true;
+  Future<void> _initialize() async {
+    if (_isInitialized) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      await _loadCategories();
+      if (_noteId != null) await _loadNote();
+
+      setState(() {
+        _isInitialized = true;
+        _isLoading = false;
+      });
+    } catch (e) {
+      logger.e('Error initializing note editor: $e');
+      setState(() => _isLoading = false);
+      _showErrorSnackBar('Gagal memuat data: ${e.toString()}');
+    }
+  }
+
+  Future<void> _loadNote() async {
+    if (localDatabase == null || _noteId == null) return;
+
+    try {
+      final noteFromDb = await localDatabase!.query(
+        'Notes',
+        where: 'id = ?',
+        whereArgs: [_noteId],
+      );
+
+      if (noteFromDb.isEmpty) {
+        _showErrorSnackBar('Catatan tidak ditemukan');
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+
+      final note = Note.fromJson(noteFromDb.first);
+
+      if (!mounted) return;
+
+      // Find category
+      _category = _categories.firstWhere(
+            (cat) => cat.id == note.categoryId,
+        orElse: () => _categories.first,
+      );
+
+      _titleController.text = note.title;
+      final initialContentDeltaHashCode = _setInitialContent(note.content!);
+
+      setState(() {
+        _initialTitle = note.title;
+        _initialContentDeltaHashCode = initialContentDeltaHashCode;
+      });
+    } catch (e) {
+      logger.e('Error loading note: $e');
+      _showErrorSnackBar('Gagal memuat catatan');
+    }
+  }
+
+  int _setInitialContent(String content) {
+    try {
+      final delta = HtmlToDelta().convert(content);
+      _contentController.document = Document.fromDelta(delta);
+      return delta.hashCode;
+    } catch (e) {
+      logger.e('Error setting initial content: $e');
+      return 0;
+    }
+  }
+
+  Future<void> _loadCategories() async {
+    if (localDatabase == null) return;
+
+    try {
+      final categoriesFromDb = await localDatabase!.query('Categories');
+
+      if (!mounted) return;
+
+      setState(() {
+        _categories = categoriesFromDb
+            .map((categoryJson) => Category.fromJson(categoryJson))
+            .toList();
+      });
+    } catch (e) {
+      logger.e('Error loading categories: $e');
+    }
+  }
+
+  Future<void> _showCategoriesDialog() async {
+    if (_categories.isEmpty) {
+      _showErrorSnackBar('Tidak ada kategori tersedia');
+      return;
     }
 
-    return await showDialog<bool>(
+    Category? selectedCategory = _category;
+
+    final result = await showDialog<Category>(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Batalkan penulisan?'),
-          content: const Text('Catatan akan terbuang jika belum disimpan.'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, dialogSetState) => AlertDialog(
+          contentPadding: const EdgeInsets.all(20),
+          shape: const BeveledRectangleBorder(),
+          title: const Text(
+            'Pilih Kategori',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 300),
+            child: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _categories.length,
+                itemBuilder: (context, index) => RadioListTile<Category>(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(_categories[index].name),
+                  value: _categories[index],
+                  groupValue: selectedCategory,
+                  onChanged: (value) => dialogSetState(() => selectedCategory = value),
+                ),
+              ),
+            ),
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Keluar'),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Batal'),
             ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Tetap menulis'),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                shape: const BeveledRectangleBorder(),
+                backgroundColor: Colors.orangeAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(context).pop(selectedCategory),
+              child: const Text('Pilih'),
             ),
           ],
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() => _category = result);
+    }
+  }
+
+  Future<void> _save() async {
+    if (_isSaving) return;
+
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      _showErrorSnackBar('Judul catatan tidak boleh kosong');
+      return;
+    }
+
+    if (_category == null) {
+      await _showCategoriesDialog();
+      if (_category == null) return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final delta = _contentController.document.toDelta();
+      final now = DateTime.now().toIso8601String();
+
+      final noteData = {
+        'title': title,
+        'content': DeltaToHTML.encodeJson(delta.toJson()),
+        'category_id': _category!.id,
+        'updated_at': now,
+      };
+
+      final bool isNewNote = _noteId == null;
+
+      if (isNewNote) {
+        // Create new note
+        noteData['created_at'] = now;
+        final savedNoteId = await localDatabase!.insert(
+          'Notes',
+          noteData,
+          conflictAlgorithm: ConflictAlgorithm.replace,
         );
-      },
-    ) ?? false;
+        setState(() => _noteId = savedNoteId);
+        logger.d('New note saved with ID: $savedNoteId');
+      } else {
+        // Update existing note
+        await localDatabase!.update(
+          'Notes',
+          noteData,
+          where: 'id = ?',
+          whereArgs: [_noteId],
+        );
+        logger.d('Note updated with ID: $_noteId');
+      }
+
+      // Update initial values to reflect saved state
+      setState(() {
+        _initialTitle = title;
+        _initialContentDeltaHashCode = delta.hashCode;
+      });
+
+      _showSuccessSnackBar(
+        isNewNote ? 'Catatan berhasil disimpan' : 'Catatan berhasil diperbarui',
+      );
+    } catch (e) {
+      logger.e('Error saving note: $e');
+      _showErrorSnackBar('Gagal menyimpan catatan: ${e.toString()}');
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  Future<bool> _showExitConfirmation() async {
+    if (!_hasUnsavedChanges) return true;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: const BeveledRectangleBorder(),
+        title: const Text(
+          'Batalkan penulisan?',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: const Text('Perubahan akan hilang jika belum disimpan.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Tetap menulis'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Keluar', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _handleBackPressed() async {
+    final shouldPop = await _showExitConfirmation();
+    if (shouldPop && mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Memuat...')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (bool didPop, Object? result) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-
-        if (!_hasUnsavedChanges) return;
-
-        final bool shouldPop = await _showExitConfirmation();
-
-        if (shouldPop && context.mounted) {
-          Navigator.of(context).pop();
-        }
+        await _handleBackPressed();
       },
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () async {
-              final bool shouldPop = await _showExitConfirmation();
-              if (shouldPop && context.mounted) {
-                Navigator.of(context).pop();
-              }
-            },
+            onPressed: _handleBackPressed,
           ),
           actions: [
             // Category selector button
             TextButton(
               onPressed: _showCategoriesDialog,
               child: Text(
-                _category != null ? _category!.name : 'Pilih Kategori',
+                _category?.name ?? 'Pilih Kategori',
                 style: TextStyle(
-                  color: Colors.grey,
+                  color: _category != null ? Colors.orangeAccent : Colors.grey,
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
             // Save button
             TextButton(
-              onPressed: _save,
-              child: const Text(
+              onPressed: _isSaving ? null : _save,
+              child: Text(
                 'Simpan',
                 style: TextStyle(
-                  color: Colors.orangeAccent,
+                  color: _isSaving ? Colors.grey : Colors.orangeAccent,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            const SizedBox(width: 10,)
+            const SizedBox(width: 8),
           ],
         ),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                  hintText: 'Nama catatan',
+            // Title input
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  hintText: 'Judul catatan',
                   hintStyle: TextStyle(fontSize: 18, color: Colors.grey),
-                  border: UnderlineInputBorder(borderSide: BorderSide.none),
-                  contentPadding: EdgeInsets.all(10)
-              ),
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                  border: InputBorder.none,
+                ),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _editorFocusNode.requestFocus(),
               ),
             ),
+
+            // Content editor
             Expanded(
               child: QuillEditor(
                 controller: _contentController,
-                scrollController: ScrollController(),
+                scrollController: _scrollController,
+                focusNode: _editorFocusNode,
                 config: QuillEditorConfig(
-                  placeholder: 'Tulis disini...',
-                  padding: EdgeInsets.all(10),
+                  placeholder: 'Tulis di sini...',
+                  padding: const EdgeInsets.all(16),
                   expands: true,
+                  autoFocus: false,
                   customStyles: DefaultStyles(
                     paragraph: DefaultTextBlockStyle(
-                      TextStyle(fontSize: 14, color: Colors.black),
+                      const TextStyle(fontSize: 16, height: 1.4, color: Colors.black),
                       HorizontalSpacing.zero,
                       VerticalSpacing.zero,
                       VerticalSpacing.zero,
                       null,
                     ),
                     placeHolder: DefaultTextBlockStyle(
-                      TextStyle(
-                        fontSize: 14,
+                      const TextStyle(
+                        fontSize: 16,
                         color: Colors.grey,
+                        height: 1.4,
                       ),
                       HorizontalSpacing.zero,
                       VerticalSpacing.zero,
@@ -328,41 +452,47 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     ),
                   ),
                 ),
-                focusNode: FocusNode(),
               ),
             ),
-            QuillSimpleToolbar(
-              controller: _contentController,
-              config: const QuillSimpleToolbarConfig(
-                // Aktif
-                showBoldButton: true,
-                showItalicButton: true,
-                showUnderLineButton: true,
-                showListNumbers: true,
-                showListBullets: true,
-                showHeaderStyle: true,
 
-                // Nonaktif
-                showFontFamily: false,
-                showFontSize: false,
-                showStrikeThrough: false,
-                showInlineCode: false,
-                showColorButton: false,
-                showBackgroundColorButton: false,
-                showClearFormat: false,
-                showAlignmentButtons: false,
-                showDirection: false,
-                showListCheck: false,
-                showCodeBlock: false,
-                showQuote: false,
-                showIndent: false,
-                showLink: false,
-                showUndo: false,
-                showRedo: false,
-                showSearchButton: false,
-                showSubscript: false,
-                showSuperscript: false,
-                showSmallButton: false,
+            // Toolbar
+            Container(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey.shade300)),
+              ),
+              child: QuillSimpleToolbar(
+                controller: _contentController,
+                config: const QuillSimpleToolbarConfig(
+                  // Active buttons
+                  showBoldButton: true,
+                  showItalicButton: true,
+                  showUnderLineButton: true,
+                  showListNumbers: true,
+                  showListBullets: true,
+                  showHeaderStyle: true,
+                  showUndo: true,
+                  showRedo: true,
+
+                  // Disabled buttons
+                  showFontFamily: false,
+                  showFontSize: false,
+                  showStrikeThrough: false,
+                  showInlineCode: false,
+                  showColorButton: false,
+                  showBackgroundColorButton: false,
+                  showClearFormat: false,
+                  showAlignmentButtons: false,
+                  showDirection: false,
+                  showListCheck: false,
+                  showCodeBlock: false,
+                  showQuote: false,
+                  showIndent: false,
+                  showLink: false,
+                  showSearchButton: false,
+                  showSubscript: false,
+                  showSuperscript: false,
+                  showSmallButton: false,
+                ),
               ),
             ),
           ],
