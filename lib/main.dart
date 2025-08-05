@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/note_editor_page.dart';
 import 'package:notelance/notes_page.dart';
+import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:notelance/sqllite.dart';
 import 'package:logger/logger.dart';
 
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:provider/provider.dart';
 
 var logger = Logger();
 
@@ -21,26 +23,29 @@ class NotelanceApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Notelance',
-      debugShowCheckedModeBanner: false,
+    return ChangeNotifierProvider(
+      create: (_) => CategoriesNotifier(),
+      child: MaterialApp(
+          title: 'Notelance',
+          debugShowCheckedModeBanner: false,
 
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+            useMaterial3: true,
+          ),
+
+          routes: {
+            Notelance.path: (_) => Notelance(),
+            NoteEditorPage.path: (_) => NoteEditorPage()
+          },
+
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            FlutterQuillLocalizations.delegate,
+          ]
       ),
-
-      routes: {
-        Notelance.path: (context) => Notelance(),
-        NoteEditorPage.path: (context) => NoteEditorPage()
-      },
-
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        FlutterQuillLocalizations.delegate,
-      ]
     );
   }
 }
@@ -56,9 +61,9 @@ class Notelance extends StatefulWidget {
 
 class _NotelanceState extends State<Notelance> {
   @override
-  void initState() {
-    super.initState();
-    _loadCategories();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    WidgetsBinding.instance.addPostFrameCallback((_) =>  _loadCategories());
   }
 
   final TextEditingController _searchController = TextEditingController();
@@ -68,17 +73,21 @@ class _NotelanceState extends State<Notelance> {
   Future<void> _loadCategories() async {
     if (localDatabase == null) return;
 
-    try {
-      final List<Map<String, dynamic>> categoriesFromDb = await localDatabase!.query(
-        'Categories',
-      );
-      setState(() {
-        _categories = categoriesFromDb
-            .map((folderJson) => Category.fromJson(folderJson))
-            .toList();
-      });
-    } catch (e) {
-      logger.e(e.toString());
+    final categoriesNotifier = context.read<CategoriesNotifier>();
+
+    if (categoriesNotifier.shouldReloadCategories) {
+      try {
+        final List<Map<String, dynamic>> categoriesFromDb = await localDatabase!.query(
+          'Categories',
+        );
+        setState(() {
+          _categories = categoriesFromDb
+              .map((folderJson) => Category.fromJson(folderJson))
+              .toList();
+        });
+      } catch (e) {
+        logger.e(e.toString());
+      }
     }
   }
 
@@ -94,11 +103,13 @@ class _NotelanceState extends State<Notelance> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<CategoriesNotifier>();
+
     if (_categories.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Notelance')),
         body: const Center(
-          child: Text('No categories yet. Add one to get started!'),
+          child: Text('Belum ada kategori. Buat satu kategori terlebih dulu.'),
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _openNoteEditorDialog(context),
@@ -108,7 +119,7 @@ class _NotelanceState extends State<Notelance> {
         ),
       );
     }
-    
+
     return DefaultTabController(
       length: _categories.length,
       child: Scaffold(

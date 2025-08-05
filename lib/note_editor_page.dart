@@ -4,7 +4,9 @@ import 'package:delta_to_html/delta_to_html.dart';
 import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
+import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:notelance/sqllite.dart';
+import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 class NoteEditorPage extends StatefulWidget {
@@ -24,6 +26,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   final QuillController _contentController = QuillController.basic();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _editorFocusNode = FocusNode();
+  final TextEditingController _newCategoryController =
+      TextEditingController(); // Added controller
 
   Category? _category;
   List<Category> _categories = [];
@@ -36,7 +40,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     final String title = _titleController.text.trim();
     final contentDeltaHashCode = _contentController.document.toDelta().hashCode;
-    return _initialTitle != title || _initialContentDeltaHashCode != contentDeltaHashCode;
+    return _initialTitle != title ||
+        _initialContentDeltaHashCode != contentDeltaHashCode;
   }
 
   bool _isSaving = false;
@@ -66,6 +71,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _contentController.dispose();
     _scrollController.dispose();
     _editorFocusNode.dispose();
+    _newCategoryController.dispose(); // Dispose controller
     super.dispose();
   }
 
@@ -111,8 +117,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
       // Find category
       _category = _categories.firstWhere(
-            (cat) => cat.id == note.categoryId,
-        orElse: () => _categories.first,
+        (cat) => cat.id == note.categoryId,
+        orElse: () => _categories.first, // Should be a safe default or null
       );
 
       _titleController.text = note.title;
@@ -158,65 +164,146 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   Future<void> _showCategoriesDialog() async {
-    if (_categories.isEmpty) {
-      _showErrorSnackBar('Tidak ada kategori tersedia');
-      return;
-    }
+    // Clear previous text for new category input, done before dialog shows
+    _newCategoryController.clear();
 
-    Category? selectedCategory = _category;
+    const Object newCategorySentinel = Object();
+    Category? initialCategory = _category;
 
-    final result = await showDialog<Category>(
+    final Object? choosenCategory = await showDialog<Object>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, dialogSetState) => AlertDialog(
-          contentPadding: const EdgeInsets.all(20),
-          shape: const BeveledRectangleBorder(),
-          title: const Text(
-            'Pilih Kategori',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
+      builder: (context) {
+        Object? selectedRadioValue = initialCategory;
+        final newCategoryFocusNode = FocusNode();
+
+        return StatefulBuilder(
+          builder: (context, dialogSetState) => AlertDialog(
+            contentPadding: const EdgeInsets.all(20),
+            shape: const BeveledRectangleBorder(),
+            title: const Text(
+              'Pilih Kategori',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 300),
-            child: SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _categories.length,
-                itemBuilder: (context, index) => RadioListTile<Category>(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(_categories[index].name),
-                  value: _categories[index],
-                  groupValue: selectedCategory,
-                  onChanged: (value) => dialogSetState(() => selectedCategory = value),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 350),
+              child: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RadioListTile<Object>(
+                      contentPadding: EdgeInsets.zero,
+                      title: TextField(
+                        controller: _newCategoryController,
+                        focusNode: newCategoryFocusNode,
+                        decoration: const InputDecoration(
+                          hintText: 'Buat kategori baru',
+                          contentPadding: EdgeInsets.symmetric(vertical: 10),
+                          border: UnderlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (value) {
+                          // If user types, ensure "new category" radio is selected
+                          if (selectedRadioValue != newCategorySentinel) {
+                            dialogSetState(() {
+                              selectedRadioValue = newCategorySentinel;
+                            });
+                          }
+                        },
+                        onTap: () {
+                          if (selectedRadioValue != newCategorySentinel) {
+                            dialogSetState(() {
+                              selectedRadioValue = newCategorySentinel;
+                            });
+                          }
+                        },
+                      ),
+                      value: newCategorySentinel,
+                      groupValue: selectedRadioValue,
+                      onChanged: (value) {
+                        dialogSetState(() {
+                          selectedRadioValue = newCategorySentinel;
+                        });
+                        newCategoryFocusNode.requestFocus();
+                      },
+                    ),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _categories.length,
+                        itemBuilder: (context, index) {
+                          final category = _categories[index];
+                          return RadioListTile<Object>(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(category.name),
+                            value: category,
+                            groupValue: selectedRadioValue,
+                            onChanged: (value) {
+                              dialogSetState(() {
+                                selectedRadioValue = category;
+                                _newCategoryController.clear();
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Batal'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                shape: const BeveledRectangleBorder(),
-                backgroundColor: Colors.orangeAccent,
-                foregroundColor: Colors.white,
+            actions: [
+              TextButton(
+                onPressed: () {
+                  newCategoryFocusNode.dispose();
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Batal'),
               ),
-              onPressed: () => Navigator.of(context).pop(selectedCategory),
-              child: const Text('Pilih'),
-            ),
-          ],
-        ),
-      ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  shape: const BeveledRectangleBorder(),
+                  backgroundColor: Colors.orangeAccent,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: (_category == null && _newCategoryController.text.trim().isEmpty)
+                    ? null
+                    : () {
+                      newCategoryFocusNode.dispose();
+                      if (selectedRadioValue == newCategorySentinel) {
+                        if (_newCategoryController.text.trim().isNotEmpty) {
+                          Navigator.of(context).pop(newCategorySentinel);
+                        } else {
+                          // New category radio selected, but text field is empty
+                          Navigator.of(context).pop(); // Effectively a cancel or invalid selection
+                        }
+                      } else if (selectedRadioValue is Category) {
+                        Navigator.of(context).pop(selectedRadioValue as Category);
+                      } else {
+                        Navigator.of(context).pop(); // Nothing selected
+                      }
+                    },
+                child: const Text('Pilih'),
+              ),
+            ],
+          ),
+        );
+      },
     );
 
-    if (result != null) {
-      setState(() => _category = result);
+    if (choosenCategory is Category) {
+      setState(() => _category = choosenCategory);
+    }
+
+    // User selected "new" and provided text (checked by "Pilih" button logic).
+    // _newCategoryController has the text.
+    // Set _category to null to ensure _save logic prioritizes _newCategoryController.
+    if ((choosenCategory == newCategorySentinel) && _newCategoryController.text.trim().isNotEmpty) {
+      setState(() => _category = null);
     }
   }
 
@@ -229,28 +316,43 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       return;
     }
 
-    if (_category == null) {
-      await _showCategoriesDialog();
-      if (_category == null) return;
-    }
-
     setState(() => _isSaving = true);
 
     try {
       final delta = _contentController.document.toDelta();
       final now = DateTime.now().toIso8601String();
+      Category? categoryToBeAttatched = _category;
+
+      // Handle new category creation if text is provided
+      if (categoryToBeAttatched == null && _newCategoryController.text.trim().isNotEmpty) {
+        final newCategoryName = _newCategoryController.text.trim();
+
+        // Placeholder: Actual database insertion for new category
+        final newCategoryId = await localDatabase!.insert('Categories', {'name': newCategoryName});
+        categoryToBeAttatched = Category(id: newCategoryId, name: newCategoryName);
+        await _loadCategories(); // Reload categories to include the new one
+
+        if (mounted) {
+          context.read<CategoriesNotifier>().reloadCategories();
+        }
+      }
+
+      if (categoryToBeAttatched == null) {
+        _showErrorSnackBar('Kategori belum dipilih atau dibuat.');
+        setState(() => _isSaving = false);
+        return;
+      }
 
       final noteData = {
         'title': title,
         'content': DeltaToHTML.encodeJson(delta.toJson()),
-        'category_id': _category!.id,
+        'category_id': categoryToBeAttatched.id, // Use categoryToBeAttatched
         'updated_at': now,
       };
 
       final bool isNewNote = _noteId == null;
 
       if (isNewNote) {
-        // Create new note
         noteData['created_at'] = now;
         final savedNoteId = await localDatabase!.insert(
           'Notes',
@@ -260,7 +362,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         setState(() => _noteId = savedNoteId);
         logger.d('New note saved with ID: $savedNoteId');
       } else {
-        // Update existing note
         await localDatabase!.update(
           'Notes',
           noteData,
@@ -270,10 +371,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         logger.d('Note updated with ID: $_noteId');
       }
 
-      // Update initial values to reflect saved state
       setState(() {
         _initialTitle = title;
         _initialContentDeltaHashCode = delta.hashCode;
+        _category = categoryToBeAttatched; // Reflect the saved category
+        _newCategoryController.clear(); // Clear after successful save
       });
 
       _showSuccessSnackBar(
@@ -372,18 +474,24 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             onPressed: _handleBackPressed,
           ),
           actions: [
-            // Category selector button
             TextButton(
               onPressed: _showCategoriesDialog,
               child: Text(
-                _category?.name ?? 'Pilih Kategori',
+                _category?.name ??
+                    (_newCategoryController.text.trim().isNotEmpty
+                        ? "Baru: ${_newCategoryController.text.trim()}"
+                        : 'Pilih Kategori'),
                 style: TextStyle(
-                  color: _category != null ? Colors.orangeAccent : Colors.grey,
+                  color:
+                      _category != null ||
+                          _newCategoryController.text.trim().isNotEmpty
+                      ? Colors.orangeAccent
+                      : Colors.grey,
                   fontWeight: FontWeight.w500,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            // Save button
             TextButton(
               onPressed: _isSaving ? null : _save,
               child: Text(
@@ -400,7 +508,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title input
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
@@ -419,8 +526,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 onSubmitted: (_) => _editorFocusNode.requestFocus(),
               ),
             ),
-
-            // Content editor
             Expanded(
               child: QuillEditor(
                 controller: _contentController,
@@ -433,7 +538,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   autoFocus: false,
                   customStyles: DefaultStyles(
                     paragraph: DefaultTextBlockStyle(
-                      const TextStyle(fontSize: 16, height: 1.4, color: Colors.black),
+                      const TextStyle(
+                        fontSize: 16,
+                        height: 1.4,
+                        color: Colors.black,
+                      ),
                       HorizontalSpacing.zero,
                       VerticalSpacing.zero,
                       VerticalSpacing.zero,
@@ -454,48 +563,44 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               ),
             ),
-
-            // Toolbar
-            Container(
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.grey.shade300)),
-              ),
-              child: QuillSimpleToolbar(
-                controller: _contentController,
-                config: const QuillSimpleToolbarConfig(
-                  // Active buttons
-                  showBoldButton: true,
-                  showItalicButton: true,
-                  showUnderLineButton: true,
-                  showListNumbers: true,
-                  showListBullets: true,
-                  showHeaderStyle: true,
-                  showUndo: true,
-                  showRedo: true,
-
-                  // Disabled buttons
-                  showFontFamily: false,
-                  showFontSize: false,
-                  showStrikeThrough: false,
-                  showInlineCode: false,
-                  showColorButton: false,
-                  showBackgroundColorButton: false,
-                  showClearFormat: false,
-                  showAlignmentButtons: false,
-                  showDirection: false,
-                  showListCheck: false,
-                  showCodeBlock: false,
-                  showQuote: false,
-                  showIndent: false,
-                  showLink: false,
-                  showSearchButton: false,
-                  showSubscript: false,
-                  showSuperscript: false,
-                  showSmallButton: false,
-                ),
-              ),
-            ),
+            // QuillSimpleToolbar removed from here
           ],
+        ),
+        bottomNavigationBar: Container( // QuillSimpleToolbar moved here
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: Colors.grey.shade300)),
+          ),
+          child: QuillSimpleToolbar(
+            controller: _contentController,
+            config: const QuillSimpleToolbarConfig(
+              showBoldButton: true,
+              showItalicButton: true,
+              showUnderLineButton: true,
+              showListNumbers: true,
+              showListBullets: true,
+              showHeaderStyle: true,
+              showUndo: true,
+              showRedo: true,
+              showFontFamily: false,
+              showFontSize: false,
+              showStrikeThrough: false,
+              showInlineCode: false,
+              showColorButton: false,
+              showBackgroundColorButton: false,
+              showClearFormat: false,
+              showAlignmentButtons: false,
+              showDirection: false,
+              showListCheck: false,
+              showCodeBlock: false,
+              showQuote: false,
+              showIndent: false,
+              showLink: false,
+              showSearchButton: false,
+              showSubscript: false,
+              showSuperscript: false,
+              showSmallButton: false,
+            ),
+          ),
         ),
       ),
     );

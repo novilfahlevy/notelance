@@ -5,9 +5,9 @@ import 'package:notelance/sqllite.dart';
 import 'package:notelance/note_editor_page.dart';
 
 class NotesPage extends StatefulWidget {
-  final Category category;
-
   const NotesPage({super.key, required this.category});
+
+  final Category category;
 
   @override
   State<NotesPage> createState() => _NotesPageState();
@@ -51,75 +51,75 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
     }
   }
 
-  Future<void> _deleteNote(Note note) async {
-    try {
-      await localDatabase!.delete(
-        'Notes',
-        where: 'id = ?',
-        whereArgs: [note.id],
-      );
+  // Future<void> _deleteNote(Note note) async {
+  //   try {
+  //     await localDatabase!.delete(
+  //       'Notes',
+  //       where: 'id = ?',
+  //       whereArgs: [note.id],
+  //     );
+  //
+  //     // Remove the note from the list
+  //     setState(() {
+  //       _notes.removeWhere((n) => n.id == note.id);
+  //     });
+  //
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text('Catatan "${note.title}" berhasil dihapus'),
+  //           backgroundColor: Colors.red,
+  //           action: SnackBarAction(
+  //             label: 'Batalkan',
+  //             textColor: Colors.white,
+  //             onPressed: () {
+  //               // TODO: Implement undo functionality if needed
+  //             },
+  //           ),
+  //         ),
+  //       );
+  //     }
+  //
+  //     logger.d('Note deleted: ${note.title}');
+  //   } catch (e) {
+  //     logger.e('Error deleting note: ${e.toString()}');
+  //
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text('Gagal menghapus catatan: ${e.toString()}'),
+  //           backgroundColor: Colors.red,
+  //         ),
+  //       );
+  //     }
+  //   }
+  // }
 
-      // Remove the note from the list
-      setState(() {
-        _notes.removeWhere((n) => n.id == note.id);
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Catatan "${note.title}" berhasil dihapus'),
-            backgroundColor: Colors.red,
-            action: SnackBarAction(
-              label: 'Batalkan',
-              textColor: Colors.white,
-              onPressed: () {
-                // TODO: Implement undo functionality if needed
-              },
-            ),
-          ),
-        );
-      }
-
-      logger.d('Note deleted: ${note.title}');
-    } catch (e) {
-      logger.e('Error deleting note: ${e.toString()}');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal menghapus catatan: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _showDeleteConfirmation(Note note) async {
-    return showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Hapus Catatan'),
-          content: Text('Apakah Anda yakin ingin menghapus catatan "${note.title}"?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Batal'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _deleteNote(note);
-              },
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Hapus'),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  // Future<void> _showDeleteConfirmation(Note note) async {
+  //   return showDialog<void>(
+  //     context: context,
+  //     builder: (BuildContext context) {
+  //       return AlertDialog(
+  //         title: const Text('Hapus Catatan'),
+  //         content: Text('Apakah Anda yakin ingin menghapus catatan "${note.title}"?'),
+  //         actions: [
+  //           TextButton(
+  //             onPressed: () => Navigator.of(context).pop(),
+  //             child: const Text('Batal'),
+  //           ),
+  //           TextButton(
+  //             onPressed: () {
+  //               Navigator.of(context).pop();
+  //               _deleteNote(note);
+  //             },
+  //             style: TextButton.styleFrom(foregroundColor: Colors.red),
+  //             child: const Text('Hapus'),
+  //           ),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
 
   void _goToNoteEditor(Note note) {
     // Navigate to note editor with the selected note data

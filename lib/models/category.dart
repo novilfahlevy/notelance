@@ -13,6 +13,9 @@ class Category {
     return other is Category && other.id == id && other.name == name;
   }
 
+  @override
+  int get hashCode => Object.hash(id, name);
+
   factory Category.fromJson(Map<String, dynamic> json) {
     return Category(
       id: json['id'] as int,
