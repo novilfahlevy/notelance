@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:delta_to_html/delta_to_html.dart';
+import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:notelance/sqllite.dart';
-import 'package:provider/provider.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:notelance/categories_dialog.dart'; // Import the new dialog
 
 class NoteEditorPage extends StatefulWidget {
   const NoteEditorPage({super.key});
@@ -26,11 +28,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   final QuillController _contentController = QuillController.basic();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _editorFocusNode = FocusNode();
-  final TextEditingController _newCategoryController =
-      TextEditingController(); // Added controller
 
   Category? _category;
   List<Category> _categories = [];
+  String _pendingNewCategoryName = ''; // Store pending new category name
 
   String _initialTitle = '';
   int _initialContentDeltaHashCode = 0;
@@ -71,7 +72,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _contentController.dispose();
     _scrollController.dispose();
     _editorFocusNode.dispose();
-    _newCategoryController.dispose(); // Dispose controller
     super.dispose();
   }
 
@@ -117,7 +117,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
       // Find category
       _category = _categories.firstWhere(
-        (cat) => cat.id == note.categoryId,
+            (cat) => cat.id == note.categoryId,
         orElse: () => _categories.first, // Should be a safe default or null
       );
 
@@ -164,146 +164,97 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   Future<void> _showCategoriesDialog() async {
-    // Clear previous text for new category input, done before dialog shows
-    _newCategoryController.clear();
-
-    const Object newCategorySentinel = Object();
-    Category? initialCategory = _category;
-
-    final Object? choosenCategory = await showDialog<Object>(
+    final result = await CategoriesDialog.show(
       context: context,
-      builder: (context) {
-        Object? selectedRadioValue = initialCategory;
-        final newCategoryFocusNode = FocusNode();
-
-        return StatefulBuilder(
-          builder: (context, dialogSetState) => AlertDialog(
-            contentPadding: const EdgeInsets.all(20),
-            shape: const BeveledRectangleBorder(),
-            title: const Text(
-              'Pilih Kategori',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            content: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 350),
-              child: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    RadioListTile<Object>(
-                      contentPadding: EdgeInsets.zero,
-                      title: TextField(
-                        controller: _newCategoryController,
-                        focusNode: newCategoryFocusNode,
-                        decoration: const InputDecoration(
-                          hintText: 'Buat kategori baru',
-                          contentPadding: EdgeInsets.symmetric(vertical: 10),
-                          border: UnderlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onChanged: (value) {
-                          // If user types, ensure "new category" radio is selected
-                          if (selectedRadioValue != newCategorySentinel) {
-                            dialogSetState(() {
-                              selectedRadioValue = newCategorySentinel;
-                            });
-                          }
-                        },
-                        onTap: () {
-                          if (selectedRadioValue != newCategorySentinel) {
-                            dialogSetState(() {
-                              selectedRadioValue = newCategorySentinel;
-                            });
-                          }
-                        },
-                      ),
-                      value: newCategorySentinel,
-                      groupValue: selectedRadioValue,
-                      onChanged: (value) {
-                        dialogSetState(() {
-                          selectedRadioValue = newCategorySentinel;
-                        });
-                        newCategoryFocusNode.requestFocus();
-                      },
-                    ),
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _categories.length,
-                        itemBuilder: (context, index) {
-                          final category = _categories[index];
-                          return RadioListTile<Object>(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(category.name),
-                            value: category,
-                            groupValue: selectedRadioValue,
-                            onChanged: (value) {
-                              dialogSetState(() {
-                                selectedRadioValue = category;
-                                _newCategoryController.clear();
-                              });
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  newCategoryFocusNode.dispose();
-                  Navigator.of(context).pop();
-                },
-                child: const Text('Batal'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  shape: const BeveledRectangleBorder(),
-                  backgroundColor: Colors.orangeAccent,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: (_category == null && _newCategoryController.text.trim().isEmpty)
-                    ? null
-                    : () {
-                      newCategoryFocusNode.dispose();
-                      if (selectedRadioValue == newCategorySentinel) {
-                        if (_newCategoryController.text.trim().isNotEmpty) {
-                          Navigator.of(context).pop(newCategorySentinel);
-                        } else {
-                          // New category radio selected, but text field is empty
-                          Navigator.of(context).pop(); // Effectively a cancel or invalid selection
-                        }
-                      } else if (selectedRadioValue is Category) {
-                        Navigator.of(context).pop(selectedRadioValue as Category);
-                      } else {
-                        Navigator.of(context).pop(); // Nothing selected
-                      }
-                    },
-                child: const Text('Pilih'),
-              ),
-            ],
-          ),
-        );
-      },
+      categories: _categories,
+      selectedCategory: _category,
     );
 
-    if (choosenCategory is Category) {
-      setState(() => _category = choosenCategory);
+    if (result != null) {
+      if (result.isNewCategory) {
+        // Store the new category name to be created during save
+        setState(() {
+          _category = null;
+          _pendingNewCategoryName = result.newCategoryName!;
+        });
+      } else {
+        // Use existing category
+        setState(() {
+          _category = result.existingCategory;
+          _pendingNewCategoryName = '';
+        });
+      }
     }
+  }
 
-    // User selected "new" and provided text (checked by "Pilih" button logic).
-    // _newCategoryController has the text.
-    // Set _category to null to ensure _save logic prioritizes _newCategoryController.
-    if ((choosenCategory == newCategorySentinel) && _newCategoryController.text.trim().isNotEmpty) {
-      setState(() => _category = null);
+  Future<void> _createNewNote(Note note) async {
+    try {
+      final savedNoteId = await localDatabase!.insert(
+        'Notes',
+        note.toJson(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      setState(() => _noteId = savedNoteId);
+      logger.d('New note saved with ID: $savedNoteId');
+    } catch (e) {
+      logger.e('Error in _createNewNote method: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _updateNote(Note note) async {
+    try {
+      await localDatabase!.update(
+        'Notes',
+        note.toJson(),
+        where: 'id = ?',
+        whereArgs: [_noteId],
+      );
+      logger.d('Note updated with ID: $_noteId');
+    } catch (e) {
+      logger.e('Error in _updateNote method: $e');
+      rethrow;
+    }
+  }
+
+  Future<String> _getCreatedAtOfExistingNote() async {
+    try {
+      final existingNote = await localDatabase!.query(
+        'Notes',
+        where: 'id = ?',
+        whereArgs: [_noteId],
+      );
+
+      if (existingNote.isNotEmpty) {
+        return existingNote.first['created_at'] as String;
+      }
+
+      throw Exception('Catatan tidak ditemukan');
+    } catch (e) {
+      logger.e('Error in _getCreatedAtOfExistingNote: $e');
+      rethrow;
+    }
+  }
+
+  Future<Category> _createNewCategory(String categoryName) async {
+    try {
+      final newCategoryId = await localDatabase!.insert('Categories', {'name': categoryName});
+      final newCategory = Category(id: newCategoryId, name: categoryName);
+
+      // Reload categories to include the new one
+      await _loadCategories();
+
+      if (mounted) {
+        // Reload categories in the main page's appbar
+        context.read<CategoriesNotifier>().reloadCategories();
+      }
+
+      logger.d('Category created with ID: $newCategoryId');
+
+      return newCategory;
+    } catch (e) {
+      logger.e('Error in _createNewCategory method: $e');
+      rethrow;
     }
   }
 
@@ -311,6 +262,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     if (_isSaving) return;
 
     final title = _titleController.text.trim();
+
     if (title.isEmpty) {
       _showErrorSnackBar('Judul catatan tidak boleh kosong');
       return;
@@ -319,75 +271,66 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     setState(() => _isSaving = true);
 
     try {
-      final delta = _contentController.document.toDelta();
-      final now = DateTime.now().toIso8601String();
-      Category? categoryToBeAttatched = _category;
+      final Delta delta = _contentController.document.toDelta();
+      final String now = DateTime.now().toIso8601String();
+      Category? attachedCategory = _category;
 
-      // Handle new category creation if text is provided
-      if (categoryToBeAttatched == null && _newCategoryController.text.trim().isNotEmpty) {
-        final newCategoryName = _newCategoryController.text.trim();
-
-        // Placeholder: Actual database insertion for new category
-        final newCategoryId = await localDatabase!.insert('Categories', {'name': newCategoryName});
-        categoryToBeAttatched = Category(id: newCategoryId, name: newCategoryName);
-        await _loadCategories(); // Reload categories to include the new one
-
-        if (mounted) {
-          context.read<CategoriesNotifier>().reloadCategories();
-        }
+      // Handle new category creation if pending
+      if (attachedCategory == null && _pendingNewCategoryName.isNotEmpty) {
+        attachedCategory = await _createNewCategory(_pendingNewCategoryName);
       }
 
-      if (categoryToBeAttatched == null) {
+      if (attachedCategory == null) {
         _showErrorSnackBar('Kategori belum dipilih atau dibuat.');
         setState(() => _isSaving = false);
         return;
       }
 
-      final noteData = {
-        'title': title,
-        'content': DeltaToHTML.encodeJson(delta.toJson()),
-        'category_id': categoryToBeAttatched.id, // Use categoryToBeAttatched
-        'updated_at': now,
-      };
-
       final bool isNewNote = _noteId == null;
 
       if (isNewNote) {
-        noteData['created_at'] = now;
-        final savedNoteId = await localDatabase!.insert(
-          'Notes',
-          noteData,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-        setState(() => _noteId = savedNoteId);
-        logger.d('New note saved with ID: $savedNoteId');
+        // For new notes, create the complete data map
+        final noteData = {
+          'title': title,
+          'content': DeltaToHTML.encodeJson(delta.toJson()),
+          'category_id': attachedCategory.id,
+          'created_at': now,
+          'updated_at': now,
+        };
+        await _createNewNote(Note.fromJson(noteData));
       } else {
-        await localDatabase!.update(
-          'Notes',
-          noteData,
-          where: 'id = ?',
-          whereArgs: [_noteId],
-        );
-        logger.d('Note updated with ID: $_noteId');
+        // For existing notes, only update the fields that should change
+        final updateData = {
+          'id': _noteId,
+          'title': title,
+          'content': DeltaToHTML.encodeJson(delta.toJson()),
+          'category_id': attachedCategory.id,
+          'updated_at': now
+        };
+
+        // Create a Note object for the update method
+        // We need to fetch the existing created_at first
+        updateData['created_at'] = await _getCreatedAtOfExistingNote();
+
+        await _updateNote(Note.fromJson(updateData));
       }
 
+      // Refresh all states with the new/updated category
       setState(() {
         _initialTitle = title;
         _initialContentDeltaHashCode = delta.hashCode;
-        _category = categoryToBeAttatched; // Reflect the saved category
-        _newCategoryController.clear(); // Clear after successful save
+        _category = attachedCategory;
+        _pendingNewCategoryName = ''; // Clear pending category name
       });
 
       _showSuccessSnackBar(
         isNewNote ? 'Catatan berhasil disimpan' : 'Catatan berhasil diperbarui',
       );
     } catch (e) {
-      logger.e('Error saving note: $e');
+      logger.e('Error in _save method: $e');
       _showErrorSnackBar('Gagal menyimpan catatan: ${e.toString()}');
     } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -452,6 +395,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
+  String get _categoryDisplayText {
+    if (_category != null) {
+      return _category!.name;
+    } else if (_pendingNewCategoryName.isNotEmpty) {
+      return "Baru: $_pendingNewCategoryName";
+    } else {
+      return 'Pilih Kategori';
+    }
+  }
+
+  Color get _categoryDisplayColor {
+    return (_category != null || _pendingNewCategoryName.isNotEmpty)
+        ? Colors.orangeAccent
+        : Colors.grey;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -477,16 +436,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             TextButton(
               onPressed: _showCategoriesDialog,
               child: Text(
-                _category?.name ??
-                    (_newCategoryController.text.trim().isNotEmpty
-                        ? "Baru: ${_newCategoryController.text.trim()}"
-                        : 'Pilih Kategori'),
+                _categoryDisplayText,
                 style: TextStyle(
-                  color:
-                      _category != null ||
-                          _newCategoryController.text.trim().isNotEmpty
-                      ? Colors.orangeAccent
-                      : Colors.grey,
+                  color: _categoryDisplayColor,
                   fontWeight: FontWeight.w500,
                 ),
                 overflow: TextOverflow.ellipsis,
@@ -563,10 +515,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               ),
             ),
-            // QuillSimpleToolbar removed from here
           ],
         ),
-        bottomNavigationBar: Container( // QuillSimpleToolbar moved here
+        bottomNavigationBar: Container(
           decoration: BoxDecoration(
             border: Border(top: BorderSide(color: Colors.grey.shade300)),
           ),
