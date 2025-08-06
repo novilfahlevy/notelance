@@ -407,7 +407,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   Color get _categoryDisplayColor {
     return (_category != null || _pendingNewCategoryName.isNotEmpty)
-        ? Colors.orangeAccent
+        ? Colors.blueAccent
         : Colors.grey;
   }
 
