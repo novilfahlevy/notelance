@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:logger/logger.dart';
+import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:notelance/sqllite.dart';
+import 'package:notelance/categories_management_page.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/note_editor_page.dart';
 import 'package:notelance/notes_page.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
-import 'package:notelance/sqllite.dart';
-import 'package:logger/logger.dart';
-
-import 'package:flutter_quill/flutter_quill.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:provider/provider.dart';
 
 var logger = Logger();
 
@@ -95,6 +95,24 @@ class _NotelanceState extends State<Notelance> {
     Navigator.pushNamed(context, NoteEditorPage.path);
   }
 
+  void _showCategoriesManagementPage(BuildContext context) async {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => CategoriesManagementPage(categories: _categories),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.ease;
+
+          final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+
+          return SlideTransition(position: animation.drive(tween), child: child);
+        },
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -125,6 +143,13 @@ class _NotelanceState extends State<Notelance> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Notelance'),
+          actions: [
+            IconButton(
+              icon: Icon(Icons.label),
+              onPressed: () => _showCategoriesManagementPage(context),
+            ),
+            const SizedBox(width: 10)
+          ],
           bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
