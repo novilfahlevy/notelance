@@ -9,7 +9,8 @@ import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:notelance/sqllite.dart';
-import 'package:notelance/categories_dialog.dart'; // Import the new dialog
+import 'package:notelance/categories_dialog.dart';
+import 'package:notelance/delete_note_dialog.dart';
 
 class NoteEditorPage extends StatefulWidget {
   const NoteEditorPage({super.key});
@@ -47,6 +48,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   bool _isSaving = false;
   bool _isLoading = true;
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -183,6 +185,53 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           _category = result.existingCategory;
           _pendingNewCategoryName = '';
         });
+      }
+    }
+  }
+
+  Future<bool> _showDeleteConfirmation() async {
+    if (_noteId == null) return false; // Can't delete unsaved note
+
+    return await DeleteNoteDialog.show(
+      context: context,
+      noteTitle: _titleController.text.trim(),
+    );
+  }
+
+  Future<void> _deleteNote() async {
+    if (_noteId == null || _isDeleting) return;
+
+    final shouldDelete = await _showDeleteConfirmation();
+    if (!shouldDelete) return;
+
+    setState(() => _isDeleting = true);
+
+    try {
+      final deletedRows = await localDatabase!.delete(
+        'Notes',
+        where: 'id = ?',
+        whereArgs: [_noteId],
+      );
+
+      if (deletedRows > 0) {
+        logger.d('Note deleted successfully with ID: $_noteId');
+        _showSuccessSnackBar('Catatan berhasil dihapus');
+
+        // Wait a moment for the snackbar to show, then navigate back
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        if (mounted) {
+          Navigator.of(context).pop(true); // Return true to indicate deletion
+        }
+      } else {
+        _showErrorSnackBar('Catatan tidak ditemukan atau sudah dihapus');
+      }
+    } catch (e) {
+      logger.e('Error deleting note: $e');
+      _showErrorSnackBar('Gagal menghapus catatan: ${e.toString()}');
+    } finally {
+      if (mounted) {
+        setState(() => _isDeleting = false);
       }
     }
   }
@@ -433,6 +482,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             onPressed: _handleBackPressed,
           ),
           actions: [
+            // Only show delete button for existing notes
+            if (_noteId != null)
+              TextButton(
+                onPressed: _isDeleting ? null : _deleteNote,
+                child: Text(
+                  _isDeleting ? 'Menghapus...' : 'Hapus',
+                  style: TextStyle(
+                    color: _isDeleting ? Colors.grey : Colors.redAccent,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             TextButton(
               onPressed: _showCategoriesDialog,
               child: Text(
@@ -445,11 +507,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               ),
             ),
             TextButton(
-              onPressed: _isSaving ? null : _save,
+              onPressed: (_isSaving || _isDeleting) ? null : _save,
               child: Text(
                 'Simpan',
                 style: TextStyle(
-                  color: _isSaving ? Colors.grey : Colors.orangeAccent,
+                  color: (_isSaving || _isDeleting) ? Colors.grey : Colors.orangeAccent,
                   fontWeight: FontWeight.w600,
                 ),
               ),
