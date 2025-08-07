@@ -45,6 +45,7 @@ dependencies:
   delta_to_html: ^0.2.2
   flutter_quill_delta_from_html: ^1.5.3
   provider: ^6.1.5
+  html: ^0.15.6
 
 dev_dependencies:
   flutter_test:

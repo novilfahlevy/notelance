@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:delta_to_html/delta_to_html.dart';
 import 'package:flutter_quill/quill_delta.dart';
@@ -8,9 +7,12 @@ import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
-import 'package:notelance/sqllite.dart';
+import 'package:notelance/local_database_service.dart';
 import 'package:notelance/categories_dialog.dart';
 import 'package:notelance/delete_note_dialog.dart';
+import 'package:logger/logger.dart';
+
+var logger = Logger();
 
 class NoteEditorPage extends StatefulWidget {
   const NoteEditorPage({super.key});
@@ -24,6 +26,7 @@ class NoteEditorPage extends StatefulWidget {
 class _NoteEditorPageState extends State<NoteEditorPage> {
   int? _noteId;
   bool _isInitialized = false;
+  final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
 
   final TextEditingController _titleController = TextEditingController();
   final QuillController _contentController = QuillController.basic();
@@ -98,29 +101,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   Future<void> _loadNote() async {
-    if (localDatabase == null || _noteId == null) return;
+    if (!_databaseService.isInitialized || _noteId == null) return;
 
     try {
-      final noteFromDb = await localDatabase!.query(
-        'Notes',
-        where: 'id = ?',
-        whereArgs: [_noteId],
-      );
+      final note = await _databaseService.getNoteById(_noteId!);
 
-      if (noteFromDb.isEmpty) {
+      if (note == null) {
         _showErrorSnackBar('Catatan tidak ditemukan');
         if (mounted) Navigator.of(context).pop();
         return;
       }
-
-      final note = Note.fromJson(noteFromDb.first);
 
       if (!mounted) return;
 
       // Find category
       _category = _categories.firstWhere(
             (cat) => cat.id == note.categoryId,
-        orElse: () => _categories.first, // Should be a safe default or null
+        orElse: () => _categories.first, // Should be a safe default
       );
 
       _titleController.text = note.title;
@@ -148,17 +145,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   Future<void> _loadCategories() async {
-    if (localDatabase == null) return;
+    if (!_databaseService.isInitialized) return;
 
     try {
-      final categoriesFromDb = await localDatabase!.query('Categories');
+      final categories = await _databaseService.getCategories();
 
       if (!mounted) return;
 
       setState(() {
-        _categories = categoriesFromDb
-            .map((categoryJson) => Category.fromJson(categoryJson))
-            .toList();
+        _categories = categories;
       });
     } catch (e) {
       logger.e('Error loading categories: $e');
@@ -207,24 +202,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     setState(() => _isDeleting = true);
 
     try {
-      final deletedRows = await localDatabase!.delete(
-        'Notes',
-        where: 'id = ?',
-        whereArgs: [_noteId],
-      );
+      await _databaseService.deleteNote(_noteId!);
 
-      if (deletedRows > 0) {
-        logger.d('Note deleted successfully with ID: $_noteId');
-        _showSuccessSnackBar('Catatan berhasil dihapus');
+      logger.d('Note deleted successfully with ID: $_noteId');
+      _showSuccessSnackBar('Catatan berhasil dihapus');
 
-        // Wait a moment for the snackbar to show, then navigate back
-        await Future.delayed(const Duration(milliseconds: 500));
+      // Wait a moment for the snackbar to show, then navigate back
+      await Future.delayed(const Duration(milliseconds: 500));
 
-        if (mounted) {
-          Navigator.of(context).pop(true); // Return true to indicate deletion
-        }
-      } else {
-        _showErrorSnackBar('Catatan tidak ditemukan atau sudah dihapus');
+      if (mounted) {
+        Navigator.of(context).pop(true); // Return true to indicate deletion
       }
     } catch (e) {
       logger.e('Error deleting note: $e');
@@ -236,15 +223,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  Future<void> _createNewNote(Note note) async {
+  Future<int> _createNewNote(Note note) async {
     try {
-      final savedNoteId = await localDatabase!.insert(
-        'Notes',
-        note.toJson(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      final savedNoteId = await _databaseService.createNote(note);
       setState(() => _noteId = savedNoteId);
       logger.d('New note saved with ID: $savedNoteId');
+      return savedNoteId;
     } catch (e) {
       logger.e('Error in _createNewNote method: $e');
       rethrow;
@@ -253,12 +237,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   Future<void> _updateNote(Note note) async {
     try {
-      await localDatabase!.update(
-        'Notes',
-        note.toJson(),
-        where: 'id = ?',
-        whereArgs: [_noteId],
-      );
+      await _databaseService.updateNote(note);
       logger.d('Note updated with ID: $_noteId');
     } catch (e) {
       logger.e('Error in _updateNote method: $e');
@@ -268,14 +247,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   Future<String> _getCreatedAtOfExistingNote() async {
     try {
-      final existingNote = await localDatabase!.query(
-        'Notes',
-        where: 'id = ?',
-        whereArgs: [_noteId],
-      );
+      final existingNote = await _databaseService.getNoteById(_noteId!);
 
-      if (existingNote.isNotEmpty) {
-        return existingNote.first['created_at'] as String;
+      if (existingNote != null) {
+        return existingNote.createdAt!;
       }
 
       throw Exception('Catatan tidak ditemukan');
@@ -287,8 +262,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   Future<Category> _createNewCategory(String categoryName) async {
     try {
-      final newCategoryId = await localDatabase!.insert('Categories', {'name': categoryName});
-      final newCategory = Category(id: newCategoryId, name: categoryName);
+      final newCategory = await _databaseService.createCategory(categoryName);
 
       // Reload categories to include the new one
       await _loadCategories();
@@ -298,7 +272,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         context.read<CategoriesNotifier>().reloadCategories();
       }
 
-      logger.d('Category created with ID: $newCategoryId');
+      logger.d('Category created with ID: ${newCategory.id}');
 
       return newCategory;
     } catch (e) {
@@ -338,30 +312,27 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       final bool isNewNote = _noteId == null;
 
       if (isNewNote) {
-        // For new notes, create the complete data map
-        final noteData = {
-          'title': title,
-          'content': DeltaToHTML.encodeJson(delta.toJson()),
-          'category_id': attachedCategory.id,
-          'created_at': now,
-          'updated_at': now,
-        };
-        await _createNewNote(Note.fromJson(noteData));
+        // For new notes, create the complete Note object
+        final note = Note(
+          title: title,
+          content: DeltaToHTML.encodeJson(delta.toJson()),
+          categoryId: attachedCategory.id!,
+          createdAt: now,
+          updatedAt: now,
+        );
+        await _createNewNote(note);
       } else {
-        // For existing notes, only update the fields that should change
-        final updateData = {
-          'id': _noteId,
-          'title': title,
-          'content': DeltaToHTML.encodeJson(delta.toJson()),
-          'category_id': attachedCategory.id,
-          'updated_at': now
-        };
-
-        // Create a Note object for the update method
-        // We need to fetch the existing created_at first
-        updateData['created_at'] = await _getCreatedAtOfExistingNote();
-
-        await _updateNote(Note.fromJson(updateData));
+        // For existing notes, create Note object with existing created_at
+        final createdAt = await _getCreatedAtOfExistingNote();
+        final note = Note(
+          id: _noteId,
+          title: title,
+          content: DeltaToHTML.encodeJson(delta.toJson()),
+          categoryId: attachedCategory.id!,
+          createdAt: createdAt,
+          updatedAt: now,
+        );
+        await _updateNote(note);
       }
 
       // Refresh all states with the new/updated category
@@ -586,14 +557,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           child: QuillSimpleToolbar(
             controller: _contentController,
             config: const QuillSimpleToolbarConfig(
+              multiRowsDisplay: false,
+
+              // Active
               showBoldButton: true,
               showItalicButton: true,
               showUnderLineButton: true,
               showListNumbers: true,
               showListBullets: true,
               showHeaderStyle: true,
-              showUndo: true,
-              showRedo: true,
+              showLink: true,
+              showListCheck: false,
+
+              // Unactive
+              showUndo: false,
+              showRedo: false,
               showFontFamily: false,
               showFontSize: false,
               showStrikeThrough: false,
@@ -603,11 +581,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               showClearFormat: false,
               showAlignmentButtons: false,
               showDirection: false,
-              showListCheck: false,
               showCodeBlock: false,
               showQuote: false,
               showIndent: false,
-              showLink: false,
               showSearchButton: false,
               showSubscript: false,
               showSuperscript: false,

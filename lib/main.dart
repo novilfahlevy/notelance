@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:logger/logger.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:notelance/sqllite.dart';
+import 'package:notelance/local_database_service.dart';
 import 'package:notelance/categories_management_page.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/note_editor_page.dart';
@@ -14,7 +14,7 @@ var logger = Logger();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await loadSQLite();
+  await LocalDatabaseService.instance.initialize();
   runApp(const NotelanceApp());
 }
 
@@ -60,30 +60,27 @@ class Notelance extends StatefulWidget {
 }
 
 class _NotelanceState extends State<Notelance> {
+  final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    WidgetsBinding.instance.addPostFrameCallback((_) =>  _loadCategories());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCategories());
   }
 
   final TextEditingController _searchController = TextEditingController();
-
   List<Category> _categories = [];
 
   Future<void> _loadCategories() async {
-    if (localDatabase == null) return;
+    if (!_databaseService.isInitialized) return;
 
     final categoriesNotifier = context.read<CategoriesNotifier>();
 
     if (categoriesNotifier.shouldReloadCategories) {
       try {
-        final List<Map<String, dynamic>> categoriesFromDb = await localDatabase!.query(
-          'Categories',
-        );
+        final categories = await _databaseService.getCategories();
         setState(() {
-          _categories = categoriesFromDb
-              .map((folderJson) => Category.fromJson(folderJson))
-              .toList();
+          _categories = categories;
         });
       } catch (e) {
         logger.e(e.toString());

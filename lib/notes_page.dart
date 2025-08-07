@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
-import 'package:notelance/sqllite.dart';
+import 'package:notelance/local_database_service.dart';
 import 'package:notelance/note_editor_page.dart';
+import 'package:logger/logger.dart';
+
+var logger = Logger();
 
 class NotesPage extends StatefulWidget {
   const NotesPage({super.key, required this.category});
@@ -16,6 +19,7 @@ class NotesPage extends StatefulWidget {
 class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixin {
   List<Note> _notes = [];
   bool _isLoading = true;
+  final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
 
   @override
   bool get wantKeepAlive => true;
@@ -27,22 +31,14 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
   }
 
   Future<void> _loadNotes() async {
-    if (localDatabase == null) return;
+    if (!_databaseService.isInitialized) return;
 
     setState(() => _isLoading = true);
 
     try {
-      final List<Map<String, dynamic>> notesFromDb = await localDatabase!.query(
-        'Notes',
-        where: 'category_id = ?',
-        whereArgs: [widget.category.id],
-        orderBy: 'updated_at DESC', // Show most recently updated notes first
-      );
-
+      final notes = await _databaseService.getNotesByCategory(widget.category.id!);
       setState(() {
-        _notes = notesFromDb
-            .map((noteJson) => Note.fromJson(noteJson))
-            .toList();
+        _notes = notes;
         _isLoading = false;
       });
     } catch (e) {
@@ -50,76 +46,6 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
       setState(() => _isLoading = false);
     }
   }
-
-  // Future<void> _deleteNote(Note note) async {
-  //   try {
-  //     await localDatabase!.delete(
-  //       'Notes',
-  //       where: 'id = ?',
-  //       whereArgs: [note.id],
-  //     );
-  //
-  //     // Remove the note from the list
-  //     setState(() {
-  //       _notes.removeWhere((n) => n.id == note.id);
-  //     });
-  //
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(
-  //           content: Text('Catatan "${note.title}" berhasil dihapus'),
-  //           backgroundColor: Colors.red,
-  //           action: SnackBarAction(
-  //             label: 'Batalkan',
-  //             textColor: Colors.white,
-  //             onPressed: () {
-  //               // TODO: Implement undo functionality if needed
-  //             },
-  //           ),
-  //         ),
-  //       );
-  //     }
-  //
-  //     logger.d('Note deleted: ${note.title}');
-  //   } catch (e) {
-  //     logger.e('Error deleting note: ${e.toString()}');
-  //
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(
-  //           content: Text('Gagal menghapus catatan: ${e.toString()}'),
-  //           backgroundColor: Colors.red,
-  //         ),
-  //       );
-  //     }
-  //   }
-  // }
-
-  // Future<void> _showDeleteConfirmation(Note note) async {
-  //   return showDialog<void>(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return AlertDialog(
-  //         title: const Text('Hapus Catatan'),
-  //         content: Text('Apakah Anda yakin ingin menghapus catatan "${note.title}"?'),
-  //         actions: [
-  //           TextButton(
-  //             onPressed: () => Navigator.of(context).pop(),
-  //             child: const Text('Batal'),
-  //           ),
-  //           TextButton(
-  //             onPressed: () {
-  //               Navigator.of(context).pop();
-  //               _deleteNote(note);
-  //             },
-  //             style: TextButton.styleFrom(foregroundColor: Colors.red),
-  //             child: const Text('Hapus'),
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
 
   void _goToNoteEditor(Note note) {
     // Navigate to note editor with the selected note data
@@ -237,9 +163,9 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
               title: Text(
                 note.title.isEmpty ? 'Catatan tanpa judul' : note.title,
                 style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                  color: Colors.white
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                    color: Colors.white
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

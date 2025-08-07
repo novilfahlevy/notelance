@@ -111,7 +111,7 @@ class CategoriesDialog {
                   backgroundColor: Colors.orangeAccent,
                   foregroundColor: Colors.white,
                 ),
-                onPressed: (selectedCategory == null && newCategoryController.text.trim().isEmpty)
+                onPressed: selectedRadioValue == null
                     ? null
                     : () {
                   newCategoryFocusNode.dispose();

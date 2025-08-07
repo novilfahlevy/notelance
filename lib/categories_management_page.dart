@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:notelance/models/category.dart';
-import 'package:notelance/sqllite.dart';
+import 'package:notelance/local_database_service.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:logger/logger.dart';
 
@@ -20,6 +20,7 @@ class CategoriesManagementPage extends StatefulWidget {
 
 class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
   late List<Category> _categories;
+  final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
 
   @override
   void initState() {
@@ -28,23 +29,9 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
   }
 
   Future<void> _addCategory(String categoryName) async {
-    if (localDatabase == null) return;
-
     try {
-      // Insert into database
-      final categoryId = await localDatabase!.insert(
-        'Categories',
-        {
-          'name': categoryName,
-          'created_at': DateTime.now().millisecondsSinceEpoch,
-        },
-      );
-
-      // Create new category object
-      final newCategory = Category(
-        id: categoryId,
-        name: categoryName
-      );
+      // Create new category using the service
+      final newCategory = await _databaseService.createCategory(categoryName);
 
       // Update local list
       setState(() {
@@ -71,36 +58,18 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
   }
 
   Future<void> _deleteCategory(Category category) async {
-    if (localDatabase == null) return;
-
     try {
       // Check if category has notes
-      final notesCount = await localDatabase!.rawQuery(
-        'SELECT COUNT(*) as count FROM Notes WHERE category_id = ?',
-        [category.id],
-      );
+      final notesCount = await _databaseService.getCategoryNotesCount(category.id!);
 
-      final count = notesCount.first['count'] as int;
-
-      if (count > 0) {
+      if (notesCount > 0) {
         // Show warning dialog if category has notes
-        final shouldDelete = await _showDeleteWarningDialog(category.name, count);
+        final shouldDelete = await _showDeleteWarningDialog(category.name, notesCount);
         if (!shouldDelete) return;
-
-        // Delete all notes in this category first
-        await localDatabase!.delete(
-          'Notes',
-          where: 'category_id = ?',
-          whereArgs: [category.id],
-        );
       }
 
-      // Delete category from database
-      await localDatabase!.delete(
-        'Categories',
-        where: 'id = ?',
-        whereArgs: [category.id],
-      );
+      // Delete category using the service
+      await _databaseService.deleteCategory(category.id!);
 
       // Update local list
       setState(() {
@@ -257,24 +226,17 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
   }
 
   Future<void> _editCategory(Category category, String newName) async {
-    if (localDatabase == null) return;
-
     try {
-      // Update in database
-      await localDatabase!.update(
-        'Categories',
-        {'name': newName},
-        where: 'id = ?',
-        whereArgs: [category.id],
-      );
+      // Update using the service
+      await _databaseService.updateCategory(category.id!, newName);
 
       // Update local list
       setState(() {
         final index = _categories.indexWhere((cat) => cat.id == category.id);
         if (index != -1) {
           _categories[index] = Category(
-            id: category.id,
-            name: newName
+              id: category.id,
+              name: newName
           );
         }
       });
