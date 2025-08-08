@@ -63,30 +63,31 @@ class LocalDatabaseService {
     }
   }
 
-  /// Create database tables
+  /// Create database tables (updated version)
   Future<void> _createTables(Database db) async {
     try {
-      // Create Categories table
+      // Create Categories table with order column
       await db.execute('''
-        CREATE TABLE IF NOT EXISTS Categories (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          created_at INTEGER
-        )
-      ''');
+      CREATE TABLE IF NOT EXISTS Categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        order_index INTEGER DEFAULT 0,
+        created_at INTEGER
+      )
+    ''');
 
       // Create Notes table
       await db.execute('''
-        CREATE TABLE IF NOT EXISTS Notes (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          title TEXT NOT NULL,
-          content TEXT,
-          category_id INTEGER,
-          created_at TEXT,
-          updated_at TEXT,
-          FOREIGN KEY (category_id) REFERENCES Categories (id) ON DELETE CASCADE
-        )
-      ''');
+      CREATE TABLE IF NOT EXISTS Notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT,
+        category_id INTEGER,
+        created_at TEXT,
+        updated_at TEXT,
+        FOREIGN KEY (category_id) REFERENCES Categories (id) ON DELETE CASCADE
+      )
+    ''');
 
       _logger.d('Tables created successfully');
     } catch (e) {
@@ -107,6 +108,15 @@ class LocalDatabaseService {
         // Table doesn't exist, create it
         await _createTables(db);
         _logger.d('Tables created in existing database');
+      } else {
+        // Check if order_index column exists, if not add it
+        var columns = await db.rawQuery("PRAGMA table_info(Categories)");
+        bool hasOrderColumn = columns.any((column) => column['name'] == 'order_index');
+
+        if (!hasOrderColumn) {
+          await db.execute('ALTER TABLE Categories ADD COLUMN order_index INTEGER DEFAULT 0');
+          _logger.d('Added order_index column to Categories table');
+        }
       }
     } catch (e) {
       _logger.e('Error ensuring tables exist: ${e.toString()}');
@@ -134,11 +144,15 @@ class LocalDatabaseService {
     try {
       final List<Map<String, dynamic>> categoriesFromDb = await _database!.query(
         'Categories',
-        orderBy: 'name ASC',
+        orderBy: 'order_index ASC, name ASC',
       );
 
       return categoriesFromDb
-          .map((categoryJson) => Category.fromJson(categoryJson))
+          .map((categoryJson) => Category.fromJson({
+        'id': categoryJson['id'],
+        'name': categoryJson['name'],
+        'order': categoryJson['order_index'] ?? 0,
+      }))
           .toList();
     } catch (e) {
       _logger.e('Error getting categories: $e');
@@ -146,22 +160,26 @@ class LocalDatabaseService {
     }
   }
 
-  /// Create a new category
-  Future<Category> createCategory(String name) async {
+  /// Create a new category (updated to include order)
+  Future<Category> createCategory(String name, {int? order}) async {
     if (_database == null) throw Exception('Database not initialized');
 
     try {
+      // If no order specified, get the next available order
+      int categoryOrder = order ?? await _getNextCategoryOrder();
+
       final categoryId = await _database!.insert(
         'Categories',
         {
           'name': name,
+          'order_index': categoryOrder,
           'created_at': DateTime.now().millisecondsSinceEpoch,
         },
       );
 
-      _logger.d('Category created with ID: $categoryId');
+      _logger.d('Category created with ID: $categoryId, order: $categoryOrder');
 
-      return Category(id: categoryId, name: name);
+      return Category(id: categoryId, name: name, order: categoryOrder);
     } catch (e) {
       _logger.e('Error creating category: $e');
       rethrow;
@@ -169,13 +187,18 @@ class LocalDatabaseService {
   }
 
   /// Update a category
-  Future<void> updateCategory(int categoryId, String newName) async {
+  Future<void> updateCategory(int categoryId, String newName, {int? newOrder}) async {
     if (_database == null) throw Exception('Database not initialized');
 
     try {
+      Map<String, dynamic> updateData = {'name': newName};
+      if (newOrder != null) {
+        updateData['order_index'] = newOrder;
+      }
+
       final updatedRows = await _database!.update(
         'Categories',
-        {'name': newName},
+        updateData,
         where: 'id = ?',
         whereArgs: [categoryId],
       );
@@ -184,10 +207,50 @@ class LocalDatabaseService {
         throw Exception('Category not found');
       }
 
-      _logger.d('Category updated: ID $categoryId -> $newName');
+      _logger.d('Category updated: ID $categoryId -> $newName${newOrder != null ? ', order: $newOrder' : ''}');
     } catch (e) {
       _logger.e('Error updating category: $e');
       rethrow;
+    }
+  }
+
+  /// Update categories order
+  Future<void> updateCategoriesOrder(List<Category> categories) async {
+    if (_database == null) throw Exception('Database not initialized');
+
+    try {
+      Batch batch = _database!.batch();
+
+      for (int i = 0; i < categories.length; i++) {
+        final category = categories[i];
+        if (category.id != null) {
+          batch.update(
+            'Categories',
+            {'order_index': i},
+            where: 'id = ?',
+            whereArgs: [category.id],
+          );
+        }
+      }
+
+      await batch.commit(noResult: true);
+      _logger.d('Categories order updated');
+    } catch (e) {
+      _logger.e('Error updating categories order: $e');
+      rethrow;
+    }
+  }
+
+  /// Get next available category order
+  Future<int> _getNextCategoryOrder() async {
+    try {
+      final result = await _database!.rawQuery(
+          'SELECT COALESCE(MAX(order_index), -1) + 1 as next_order FROM Categories'
+      );
+      return result.first['next_order'] as int;
+    } catch (e) {
+      _logger.e('Error getting next category order: $e');
+      return 0;
     }
   }
 

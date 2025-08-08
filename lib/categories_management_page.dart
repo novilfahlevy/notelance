@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:ui' show lerpDouble;
 import 'package:notelance/models/category.dart';
 import 'package:notelance/local_database_service.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
@@ -26,6 +27,8 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
   void initState() {
     super.initState();
     _categories = List.from(widget.categories);
+    // Sort by order to ensure proper display
+    _categories.sort((a, b) => a.order.compareTo(b.order));
   }
 
   Future<void> _addCategory(String categoryName) async {
@@ -36,6 +39,8 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
       // Update local list
       setState(() {
         _categories.add(newCategory);
+        // Re-sort to maintain order
+        _categories.sort((a, b) => a.order.compareTo(b.order));
       });
 
       // Notify other parts of the app to reload categories
@@ -88,6 +93,43 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Gagal menghapus kategori: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _reorderCategories(int oldIndex, int newIndex) async {
+    setState(() {
+      if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+      final Category item = _categories.removeAt(oldIndex);
+      _categories.insert(newIndex, item);
+
+      // Update order values
+      for (int i = 0; i < _categories.length; i++) {
+        _categories[i] = _categories[i].copyWith(order: i);
+      }
+    });
+
+    try {
+      // Update order in database
+      await _databaseService.updateCategoriesOrder(_categories);
+
+      // Notify other parts of the app to reload categories
+      if (mounted) {
+        context.read<CategoriesNotifier>().reloadCategories();
+      }
+
+      logger.i('Categories reordered successfully');
+    } catch (e) {
+      logger.e('Error reordering categories: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal mengubah urutan kategori: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -234,10 +276,7 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
       setState(() {
         final index = _categories.indexWhere((cat) => cat.id == category.id);
         if (index != -1) {
-          _categories[index] = Category(
-              id: category.id,
-              name: newName
-          );
+          _categories[index] = _categories[index].copyWith(name: newName);
         }
       });
 
@@ -291,35 +330,45 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
           ],
         ),
       )
-          : ListView.separated(
-        itemBuilder: (context, index) {
-          final category = _categories[index];
-          final ListTile categoryTile = ListTile(
-            contentPadding: EdgeInsets.only(left: 20, right: 10),
-            title: Text(category.name),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(Icons.edit, size: 18),
-                  onPressed: () => _showEditCategoryDialog(category),
-                ),
-                IconButton(
-                  icon: Icon(Icons.delete, size: 18, color: Colors.red),
-                  onPressed: () => _deleteCategory(category),
-                )
-              ],
+          : Column(
+        children: [
+          Expanded(
+            child: ReorderableListView.builder(
+              buildDefaultDragHandles: false,
+              padding: EdgeInsets.only(bottom: 100),
+              onReorder: _reorderCategories,
+              itemCount: _categories.length,
+                itemBuilder: (context, index) {
+                  final category = _categories[index];
+                  return Card(
+                    key: ValueKey(category.id),
+                    margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: ListTile(
+                      contentPadding: EdgeInsets.only(left: 10, right: 10),
+                      leading: ReorderableDragStartListener(
+                        index: index,
+                        child: Icon(Icons.drag_handle, color: Colors.grey.shade600),
+                      ),
+                      title: Text(category.name),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(Icons.edit, size: 18),
+                            onPressed: () => _showEditCategoryDialog(category),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.delete, size: 18, color: Colors.red),
+                            onPressed: () => _deleteCategory(category),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
             ),
-          );
-
-          if (index < _categories.length - 1) {
-            return categoryTile;
-          }
-
-          return Column(children: [categoryTile, SizedBox(height: 150)]);
-        },
-        separatorBuilder: (context, index) => Divider(),
-        itemCount: _categories.length,
+          ),
+        ],
       ),
     );
   }
