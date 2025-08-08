@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:notelance/search_page.dart';
 import 'package:provider/provider.dart';
 import 'package:logger/logger.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -36,7 +37,8 @@ class NotelanceApp extends StatelessWidget {
 
           routes: {
             Notelance.path: (_) => Notelance(),
-            NoteEditorPage.path: (_) => NoteEditorPage()
+            NoteEditorPage.path: (_) => NoteEditorPage(),
+            SearchPage.path: (_) => SearchPage()
           },
 
           localizationsDelegates: const [
@@ -92,7 +94,7 @@ class _NotelanceState extends State<Notelance> {
     Navigator.pushNamed(context, NoteEditorPage.path);
   }
 
-  void _showCategoriesManagementPage(BuildContext context) async {
+  void _showCategoriesManagementPage(BuildContext context) {
     Navigator.push(
       context,
       PageRouteBuilder(
@@ -108,6 +110,10 @@ class _NotelanceState extends State<Notelance> {
         },
       ),
     );
+  }
+
+  void _showSearchPage(context) {
+    Navigator.pushNamed(context, SearchPage.path);
   }
 
   @override
@@ -141,6 +147,10 @@ class _NotelanceState extends State<Notelance> {
         appBar: AppBar(
           title: const Text('Notelance'),
           actions: [
+            IconButton(
+              icon: Icon(Icons.search),
+              onPressed: () => _showSearchPage(context),
+            ),
             IconButton(
               icon: Icon(Icons.label),
               onPressed: () => _showCategoriesManagementPage(context),
