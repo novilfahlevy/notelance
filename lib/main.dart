@@ -67,6 +67,7 @@ class _NotelanceState extends State<Notelance> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    context.watch<CategoriesNotifier>();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadCategories());
   }
 
@@ -124,8 +125,6 @@ class _NotelanceState extends State<Notelance> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<CategoriesNotifier>();
-
     if (_categories.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Notelance')),
@@ -167,7 +166,10 @@ class _NotelanceState extends State<Notelance> {
         ),
         body: TabBarView(
           children: _categories
-              .map((category) => NotesPage(category: category))
+              .map((category) => NotesPage(
+                key: ValueKey('notes_page_${category.id}_${category.order}'),
+                category: category
+              ))
               .toList(),
         ),
         floatingActionButton: FloatingActionButton(

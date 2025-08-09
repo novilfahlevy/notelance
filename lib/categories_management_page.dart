@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:ui' show lerpDouble;
 import 'package:notelance/models/category.dart';
 import 'package:notelance/local_database_service.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
@@ -27,7 +26,6 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
   void initState() {
     super.initState();
     _categories = List.from(widget.categories);
-    // Sort by order to ensure proper display
     _categories.sort((a, b) => a.order.compareTo(b.order));
   }
 

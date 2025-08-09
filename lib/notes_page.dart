@@ -4,6 +4,8 @@ import 'package:notelance/models/note.dart';
 import 'package:notelance/local_database_service.dart';
 import 'package:notelance/note_editor_page.dart';
 import 'package:logger/logger.dart';
+import 'package:notelance/notifiers/categories_notifier.dart';
+import 'package:provider/provider.dart';
 
 var logger = Logger();
 
@@ -25,12 +27,14 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
   bool get wantKeepAlive => true;
 
   @override
-  void initState() {
-    super.initState();
-    _loadNotes();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadNotes());
   }
 
   Future<void> _loadNotes() async {
+    if (!mounted) return;
+
     if (!_databaseService.isInitialized) return;
 
     setState(() => _isLoading = true);
