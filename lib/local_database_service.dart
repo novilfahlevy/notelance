@@ -4,6 +4,7 @@ import 'package:path/path.dart';
 import 'package:logger/logger.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
+import 'package:path_provider/path_provider.dart';
 
 class LocalDatabaseService {
   static LocalDatabaseService? _instance;
@@ -36,8 +37,8 @@ class LocalDatabaseService {
       // this step, it will use the sqlite version available on the system.
       databaseFactory = databaseFactoryFfi;
 
-      var databasesPath = await getDatabasesPath();
-      String path = join(databasesPath, 'main.db');
+      Directory documentsDirectory = await getApplicationDocumentsDirectory();
+      String path = join(documentsDirectory.path, 'main.db');
 
       _database = await openDatabase(
         path,
