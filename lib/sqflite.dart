@@ -306,6 +306,26 @@ class LocalDatabaseService {
   // NOTE OPERATIONS
   // ============================================================================
 
+  /// Get all UNCATEGORIZED notes
+  Future<List<Note>> getUncategorizedNotes() async {
+    if (_database == null) throw Exception('Database not initialized');
+
+    try {
+      final List<Map<String, dynamic>> notesFromDb = await _database!.query(
+        'Notes',
+        where: 'category_id IS NULL',
+        orderBy: 'updated_at DESC',
+      );
+
+      return notesFromDb
+          .map((noteJson) => Note.fromJson(noteJson))
+          .toList();
+    } catch (e) {
+      _logger.e('Error getting notes by category: $e');
+      rethrow;
+    }
+  }
+
   /// Get all notes for a category
   Future<List<Note>> getNotesByCategory(int categoryId) async {
     if (_database == null) throw Exception('Database not initialized');
@@ -467,5 +487,22 @@ class LocalDatabaseService {
       _logger.e('Error executing raw SQL: $e');
       rethrow;
     }
+  }
+}
+
+var logger = Logger();
+
+// Backward compatibility - provide access to the database instance
+// This allows existing code to work with minimal changes
+LocalDatabaseService get localDatabase => LocalDatabaseService.instance;
+
+/// Initialize the database - call this in main()
+Future<void> loadSQFLite() async {
+  try {
+    await LocalDatabaseService.instance.initialize();
+    logger.d('Database service loaded successfully');
+  } catch (e) {
+    logger.e('Error loading database service: ${e.toString()}');
+    rethrow;
   }
 }

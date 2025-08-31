@@ -7,7 +7,7 @@ import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
-import 'package:notelance/local_database_service.dart';
+import 'package:notelance/sqflite.dart';
 import 'package:notelance/categories_dialog.dart';
 import 'package:notelance/delete_note_dialog.dart';
 import 'package:logger/logger.dart';
@@ -100,6 +100,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
+  int _setInitialContent(String content) {
+    try {
+      final delta = HtmlToDelta().convert(content);
+      _contentController.document = Document.fromDelta(delta);
+      return delta.hashCode;
+    } catch (e) {
+      logger.e('Error setting initial content: $e');
+      return 0;
+    }
+  }
+
   Future<void> _loadNote() async {
     if (!_databaseService.isInitialized || _noteId == null) return;
 
@@ -114,11 +125,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
       if (!mounted) return;
 
-      // Find category
-      _category = _categories.firstWhere(
-            (cat) => cat.id == note.categoryId,
-        orElse: () => _categories.first, // Should be a safe default
-      );
+      // Find the note's category
+      if (note.categoryId != null) {
+        _category = _categories.firstWhere((cat) => cat.id == note.categoryId);
+      }
 
       _titleController.text = note.title;
       final initialContentDeltaHashCode = _setInitialContent(note.content!);
@@ -133,17 +143,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  int _setInitialContent(String content) {
-    try {
-      final delta = HtmlToDelta().convert(content);
-      _contentController.document = Document.fromDelta(delta);
-      return delta.hashCode;
-    } catch (e) {
-      logger.e('Error setting initial content: $e');
-      return 0;
-    }
-  }
-
   Future<void> _loadCategories() async {
     if (!_databaseService.isInitialized) return;
 
@@ -152,9 +151,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
       if (!mounted) return;
 
-      setState(() {
-        _categories = categories;
-      });
+      setState(() => _categories = categories);
     } catch (e) {
       logger.e('Error loading categories: $e');
     }
@@ -303,12 +300,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         attachedCategory = await _createNewCategory(_pendingNewCategoryName);
       }
 
-      if (attachedCategory == null) {
-        _showErrorSnackBar('Kategori belum dipilih atau dibuat.');
-        setState(() => _isSaving = false);
-        return;
-      }
-
       final bool isNewNote = _noteId == null;
 
       if (isNewNote) {
@@ -316,7 +307,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         final note = Note(
           title: title,
           content: DeltaToHTML.encodeJson(delta.toJson()),
-          categoryId: attachedCategory.id!,
+          categoryId: attachedCategory?.id,
           createdAt: now,
           updatedAt: now,
         );
@@ -328,7 +319,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           id: _noteId,
           title: title,
           content: DeltaToHTML.encodeJson(delta.toJson()),
-          categoryId: attachedCategory.id!,
+          categoryId: attachedCategory?.id,
           createdAt: createdAt,
           updatedAt: now,
         );

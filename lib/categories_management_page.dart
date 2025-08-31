@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:notelance/models/category.dart';
-import 'package:notelance/local_database_service.dart';
+import 'package:notelance/sqflite.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:logger/logger.dart';
 

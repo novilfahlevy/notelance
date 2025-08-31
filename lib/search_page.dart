@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
-import 'package:notelance/local_database_service.dart';
+import 'package:notelance/sqflite.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/note_editor_page.dart';
 import 'package:flutter_html/flutter_html.dart';

@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:logger/logger.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:notelance/local_database_service.dart';
+import 'package:notelance/sqflite.dart';
 import 'package:notelance/categories_management_page.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/note_editor_page.dart';
@@ -125,23 +125,8 @@ class _NotelanceState extends State<Notelance> {
 
   @override
   Widget build(BuildContext context) {
-    if (_categories.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Notelance')),
-        body: const Center(
-          child: Text('Belum ada kategori. Buat satu kategori terlebih dulu.'),
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => _openNoteEditorDialog(context),
-          foregroundColor: Colors.white,
-          backgroundColor: Colors.orangeAccent,
-          child: const Icon(Icons.add),
-        ),
-      );
-    }
-
     return DefaultTabController(
-      length: _categories.length,
+      length: _categories.length + 1,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Notelance'),
@@ -159,18 +144,21 @@ class _NotelanceState extends State<Notelance> {
           bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: _categories
-                .map((category) => Tab(text: category.name))
-                .toList(),
+            tabs: [
+              Tab(text: 'Umum'),
+              ..._categories.map((category) => Tab(text: category.name))
+            ],
           ),
         ),
         body: TabBarView(
-          children: _categories
-              .map((category) => NotesPage(
+          children: [
+            NotesPage(key: const ValueKey('notes_page_general')),
+
+            ..._categories.map((category) => NotesPage(
                 key: ValueKey('notes_page_${category.id}_${category.order}'),
                 category: category
-              ))
-              .toList(),
+            )),
+          ],
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _openNoteEditorDialog(context),

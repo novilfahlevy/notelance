@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
-import 'package:notelance/local_database_service.dart';
+import 'package:notelance/note_card.dart';
+import 'package:notelance/sqflite.dart';
 import 'package:notelance/note_editor_page.dart';
 import 'package:logger/logger.dart';
-import 'package:flutter_html/flutter_html.dart';
 
 var logger = Logger();
 
 class NotesPage extends StatefulWidget {
-  const NotesPage({super.key, required this.category});
+  const NotesPage({super.key, this.category});
 
-  final Category category;
+  final Category? category;
 
   @override
   State<NotesPage> createState() => _NotesPageState();
@@ -39,7 +39,14 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
     setState(() => _isLoading = true);
 
     try {
-      final notes = await _databaseService.getNotesByCategory(widget.category.id!);
+      late List<Note> notes;
+
+      if (widget.category != null) {
+        notes = await _databaseService.getNotesByCategory(widget.category!.id!);
+      } else {
+        notes = await _databaseService.getUncategorizedNotes();
+      }
+
       setState(() {
         _notes = notes;
         _isLoading = false;
@@ -60,33 +67,6 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
       // Refresh the notes list when returning from editor
       _loadNotes();
     });
-  }
-
-  String _getPreviewText(String content) {
-    // Remove HTML tags for preview (simple approach)
-    String preview = content.replaceAll(RegExp(r'<[^>]*>'), '');
-
-    // Remove excessive whitespace but keep newlines
-    preview = preview.replaceAll(RegExp(r'[ 	]+'), ' ').trim();
-
-    if (preview.isEmpty) return 'Catatan kosong';
-
-    // Limit to 100 characters while preserving words
-    if (preview.length <= 100) {
-      return preview;
-    }
-
-    // Find the last space before the 100 character limit
-    int cutOff = 100;
-    int lastSpaceIndex = preview.lastIndexOf(' ', cutOff);
-
-    // If we found a space and it's not too close to the beginning
-    if (lastSpaceIndex > 50) {
-      return '${preview.substring(0, lastSpaceIndex)}...';
-    } else {
-      // If no suitable space found, cut at 100 characters
-      return '${preview.substring(0, 100)}...';
-    }
   }
 
   String _formatDate(DateTime dateTime) {
@@ -128,7 +108,7 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'Belum ada catatan di ${widget.category.name}',
+              'Belum ada catatan ${widget.category?.name ?? 'umum'}',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[600],
@@ -154,79 +134,10 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
         padding: const EdgeInsets.all(10),
         itemCount: _notes.length,
         itemBuilder: (context, index) {
-          final note = _notes[index];
-
-          return Card(
-            elevation: 0,
-            shadowColor: Colors.transparent,
-            color: Colors.orangeAccent,
-            shape: BeveledRectangleBorder(),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (note.title.isNotEmpty) ...[
-                    Text(
-                      note.title,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 24,
-                          color: Colors.white
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  SelectableRegion(
-                    focusNode: FocusNode(),
-                    selectionControls: MaterialTextSelectionControls(),
-                    child: Html(
-                      data: note.content!,
-                      style: {
-                        "body": Style(
-                          color: Colors.white,
-                          margin: Margins.all(0),
-                          padding: HtmlPaddings.all(0),
-                        ),
-                        'p': Style(
-                          color: Colors.white,
-                          margin: Margins.all(0),
-                          padding: HtmlPaddings.all(0),
-                        ),
-                        '*': Style(
-                          margin: Margins.all(0),
-                          padding: HtmlPaddings.all(0),
-                        ),
-                      },
-                    ),
-                  ),
-                  const Divider(color: Colors.white54, height: 0, thickness: 0.5),
-                  const SizedBox(height: 15,),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _formatDate(DateTime.parse(note.updatedAt!)),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () => _goToNoteEditor(note),
-                        borderRadius: BorderRadius.circular(20),
-                        child: const Padding(
-                          padding: EdgeInsets.all(4), // Small touch target
-                          child: Icon(Icons.edit_note, color: Colors.white),
-                        ),
-                      )
-                    ],
-                  ),
-                ],
-              ),
-            ),
+          return NoteCard(
+            note: _notes[index],
+            onEdit: _goToNoteEditor,
+            formatDate: _formatDate,
           );
         },
         separatorBuilder: (context, index) {
