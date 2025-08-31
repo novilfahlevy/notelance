@@ -447,6 +447,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         await _handleBackPressed();
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
@@ -548,48 +549,43 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               ),
             ),
+            QuillSimpleToolbar(
+              controller: _contentController,
+              config: const QuillSimpleToolbarConfig(
+                multiRowsDisplay: false,
+
+                // Active
+                showBoldButton: true,
+                showItalicButton: true,
+                showUnderLineButton: true,
+                showListNumbers: true,
+                showListBullets: true,
+                showHeaderStyle: true,
+                showLink: true,
+                showListCheck: false,
+
+                // Unactive
+                showUndo: false,
+                showRedo: false,
+                showFontFamily: false,
+                showFontSize: false,
+                showStrikeThrough: false,
+                showInlineCode: false,
+                showColorButton: false,
+                showBackgroundColorButton: false,
+                showClearFormat: false,
+                showAlignmentButtons: false,
+                showDirection: false,
+                showCodeBlock: false,
+                showQuote: false,
+                showIndent: false,
+                showSearchButton: false,
+                showSubscript: false,
+                showSuperscript: false,
+                showSmallButton: false,
+              ),
+            )
           ],
-        ),
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: Colors.grey.shade300)),
-          ),
-          child: QuillSimpleToolbar(
-            controller: _contentController,
-            config: const QuillSimpleToolbarConfig(
-              multiRowsDisplay: false,
-
-              // Active
-              showBoldButton: true,
-              showItalicButton: true,
-              showUnderLineButton: true,
-              showListNumbers: true,
-              showListBullets: true,
-              showHeaderStyle: true,
-              showLink: true,
-              showListCheck: false,
-
-              // Unactive
-              showUndo: false,
-              showRedo: false,
-              showFontFamily: false,
-              showFontSize: false,
-              showStrikeThrough: false,
-              showInlineCode: false,
-              showColorButton: false,
-              showBackgroundColorButton: false,
-              showClearFormat: false,
-              showAlignmentButtons: false,
-              showDirection: false,
-              showCodeBlock: false,
-              showQuote: false,
-              showIndent: false,
-              showSearchButton: false,
-              showSubscript: false,
-              showSuperscript: false,
-              showSmallButton: false,
-            ),
-          ),
         ),
       ),
     );
