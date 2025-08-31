@@ -4,6 +4,7 @@ import 'package:logger/logger.dart';
 import 'package:notelance/local_database_service.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/note_editor_page.dart';
+import 'package:flutter_html/flutter_html.dart';
 
 var logger = Logger();
 
@@ -246,48 +247,72 @@ class _SearchPageState extends State<SearchPage> {
           elevation: 0,
           shadowColor: Colors.transparent,
           color: Colors.orangeAccent,
-          shape: const BeveledRectangleBorder(),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            title: Text(
-              note.title.isEmpty ? 'Catatan tanpa judul' : note.title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-                color: Colors.white,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Column(
+          shape: BeveledRectangleBorder(),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 4),
-                Text(
-                  _getPreviewText(note.content ?? ''),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.white,
+                if (note.title.isNotEmpty) ...[
+                  Text(
+                    note.title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 24,
+                        color: Colors.white
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 10),
+                ],
+                SelectableRegion(
+                  focusNode: FocusNode(),
+                  selectionControls: MaterialTextSelectionControls(),
+                  child: Html(
+                    data: note.content!,
+                    style: {
+                      "body": Style(
+                        color: Colors.white,
+                        margin: Margins.all(0),
+                        padding: HtmlPaddings.all(0),
+                      ),
+                      'p': Style(
+                        color: Colors.white,
+                        margin: Margins.all(0),
+                        padding: HtmlPaddings.all(0),
+                      ),
+                      '*': Style(
+                        margin: Margins.all(0),
+                        padding: HtmlPaddings.all(0),
+                      ),
+                    },
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  _formatDate(DateTime.parse(note.updatedAt!)),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.white,
-                  ),
+                const Divider(color: Colors.white54, height: 0, thickness: 0.5),
+                const SizedBox(height: 15,),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _formatDate(DateTime.parse(note.updatedAt!)),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => _goToNoteEditor(note),
+                      borderRadius: BorderRadius.circular(20),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4), // Small touch target
+                        child: Icon(Icons.edit_note, color: Colors.white),
+                      ),
+                    )
+                  ],
                 ),
               ],
             ),
-            trailing: const Icon(
-              Icons.arrow_forward_ios,
-              color: Colors.white,
-              size: 16,
-            ),
-            onTap: () => _goToNoteEditor(note),
           ),
         );
       },
