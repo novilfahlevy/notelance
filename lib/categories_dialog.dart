@@ -38,9 +38,9 @@ class CategoriesDialog {
             shape: const BeveledRectangleBorder(),
             title: const Text(
               'Pilih Kategori',
-              style: TextStyle(
+              style: TextStyle( // Removed explicit color: Colors.black
                 fontSize: 16,
-                color: Colors.black,
+                // color: Colors.black, // Keep an eye on this, might need to be Theme.of(context).colorScheme.onSurface
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -131,8 +131,8 @@ class CategoriesDialog {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   shape: const BeveledRectangleBorder(),
-                  backgroundColor: Colors.orangeAccent,
-                  foregroundColor: Colors.white,
+                  backgroundColor: Theme.of(context).colorScheme.primary, // Use theme color
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary, // Use theme color
                 ),
                 onPressed: selectedRadioValue == null
                     ? null

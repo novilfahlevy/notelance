@@ -46,6 +46,44 @@ class NotelanceApp extends StatelessWidget {
             useMaterial3: true,
           ),
 
+          darkTheme: ThemeData(
+            brightness: Brightness.dark,
+            primaryColor: const Color(0xFF202124), // Main background
+            scaffoldBackgroundColor: const Color(0xFF202124), // Scaffold background
+            cardColor: const Color(0xFF303134), // Card/surface color
+            floatingActionButtonTheme: const FloatingActionButtonThemeData(
+              backgroundColor: Colors.amber, // Accent for FAB
+              foregroundColor: Colors.black, // Icon/text on FAB
+            ),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Color(0xFF202124), // AppBar background
+              elevation: 0, // No shadow for a flatter look
+              titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
+              iconTheme: IconThemeData(color: Colors.white),
+            ),
+            tabBarTheme: const TabBarThemeData(
+              labelColor: Colors.amber, // Selected tab text color
+              unselectedLabelColor: Colors.grey, // Unselected tab text color
+              indicatorColor: Colors.amber, // Tab indicator color
+            ),
+            iconTheme: const IconThemeData(color: Colors.white), // Default icon color
+            textTheme: const TextTheme( // Default text styles
+              bodyLarge: TextStyle(color: Colors.white),
+              bodyMedium: TextStyle(color: Colors.white70),
+              titleLarge: TextStyle(color: Colors.white),
+            ),
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.amber,
+              brightness: Brightness.dark,
+              background: const Color(0xFF202124), // Overall background
+              surface: const Color(0xFF303134), // Surfaces like cards
+              primary: Colors.amber, // Primary actions/highlights
+            ),
+            useMaterial3: true,
+          ),
+
+          themeMode: ThemeMode.dark, // Set dark theme as default
+
           routes: {
             Notelance.path: (_) => Notelance(),
             NoteEditorPage.path: (_) => NoteEditorPage(),
@@ -136,6 +174,15 @@ class _NotelanceState extends State<Notelance> {
 
   @override
   Widget build(BuildContext context) {
+    // Determine FAB color based on theme
+    final fabBackgroundColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.amber // Dark theme FAB color
+        : Colors.orangeAccent; // Light theme FAB color (your original)
+    final fabForegroundColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.black // Dark theme FAB icon color
+        : Colors.white; // Light theme FAB icon color (your original)
+
+
     return DefaultTabController(
       length: _categories.length + 1,
       child: Scaffold(
@@ -173,8 +220,8 @@ class _NotelanceState extends State<Notelance> {
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _openNoteEditorDialog(context),
-          foregroundColor: Colors.white,
-          backgroundColor: Colors.orangeAccent,
+          foregroundColor: fabForegroundColor,
+          backgroundColor: fabBackgroundColor,
           child: const Icon(Icons.add),
         ),
       ),

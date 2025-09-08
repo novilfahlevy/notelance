@@ -26,7 +26,6 @@ class _SearchPageState extends State<SearchPage> {
   bool _hasSearched = false;
   Timer? _debounceTimer;
 
-  // Debounce duration
   static const Duration _debounceDuration = Duration(milliseconds: 500);
 
   @override
@@ -43,10 +42,8 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _onSearchChanged() {
-    // Cancel the previous timer
     _debounceTimer?.cancel();
 
-    // If search field is empty, clear results immediately
     if (_keywordController.text.trim().isEmpty) {
       setState(() {
         _notes.clear();
@@ -56,14 +53,12 @@ class _SearchPageState extends State<SearchPage> {
       return;
     }
 
-    // Set searching state immediately for better UX
     if (!_isSearching) {
       setState(() {
         _isSearching = true;
       });
     }
 
-    // Start a new timer
     _debounceTimer = Timer(_debounceDuration, () {
       _performSearch();
     });
@@ -100,11 +95,12 @@ class _SearchPageState extends State<SearchPage> {
           _hasSearched = true;
         });
 
-        // Show error message
+        final theme = Theme.of(context);
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error searching notes: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            backgroundColor: theme.colorScheme.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -118,7 +114,6 @@ class _SearchPageState extends State<SearchPage> {
       NoteEditorPage.path,
       arguments: note,
     ).then((_) {
-      // Refresh search results when returning from editor
       if (_keywordController.text.trim().isNotEmpty) {
         _performSearch();
       }
@@ -147,21 +142,19 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildSearchResults() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     if (_isSearching) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(
-              color: Colors.orangeAccent,
-            ),
-            SizedBox(height: 16),
+            CircularProgressIndicator(color: colorScheme.primary),
+            const SizedBox(height: 16),
             Text(
               'Mencari catatan...',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
+              style: theme.textTheme.bodyMedium,
             ),
           ],
         ),
@@ -173,19 +166,12 @@ class _SearchPageState extends State<SearchPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.search,
-              size: 64,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.search, size: 64, color: theme.iconTheme.color?.withOpacity(0.4)),
             const SizedBox(height: 16),
             Text(
               'Ketik kata kunci untuk mencari catatan',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
-            )
+              style: theme.textTheme.bodyMedium,
+            ),
           ],
         ),
       );
@@ -196,19 +182,12 @@ class _SearchPageState extends State<SearchPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.search_off,
-              size: 64,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.search_off, size: 64, color: theme.iconTheme.color?.withOpacity(0.4)),
             const SizedBox(height: 16),
             Text(
               'Tidak ada catatan yang ditemukan',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
-            )
+              style: theme.textTheme.bodyMedium,
+            ),
           ],
         ),
       );
@@ -220,10 +199,10 @@ class _SearchPageState extends State<SearchPage> {
       itemBuilder: (context, index) {
         final note = _notes[index];
         return Card(
-          elevation: 0,
-          shadowColor: Colors.transparent,
-          color: Colors.orangeAccent,
-          shape: BeveledRectangleBorder(),
+          elevation: 1,
+          shadowColor: theme.shadowColor.withOpacity(0.2),
+          color: colorScheme.surface, // ✅ use surface for background
+          shape: const BeveledRectangleBorder(),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -232,10 +211,9 @@ class _SearchPageState extends State<SearchPage> {
                 if (note.title.isNotEmpty) ...[
                   Text(
                     note.title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 24,
-                        color: Colors.white
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: colorScheme.onSurface, // ✅ text adapts to surface
+                      fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -249,12 +227,12 @@ class _SearchPageState extends State<SearchPage> {
                     data: note.content!,
                     style: {
                       "body": Style(
-                        color: Colors.white,
+                        color: colorScheme.onSurface,
                         margin: Margins.all(0),
                         padding: HtmlPaddings.all(0),
                       ),
                       'p': Style(
-                        color: Colors.white,
+                        color: colorScheme.onSurface,
                         margin: Margins.all(0),
                         padding: HtmlPaddings.all(0),
                       ),
@@ -265,24 +243,30 @@ class _SearchPageState extends State<SearchPage> {
                     },
                   ),
                 ),
-                const Divider(color: Colors.white54, height: 0, thickness: 0.5),
-                const SizedBox(height: 15,),
+                Divider(
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                  height: 0,
+                  thickness: 0.5,
+                ),
+                const SizedBox(height: 15),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       _formatDate(DateTime.parse(note.updatedAt!)),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.white,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurface.withOpacity(0.8),
                       ),
                     ),
                     InkWell(
                       onTap: () => _goToNoteEditor(note),
                       borderRadius: BorderRadius.circular(20),
-                      child: const Padding(
-                        padding: EdgeInsets.all(4), // Small touch target
-                        child: Icon(Icons.edit_note, color: Colors.white),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.edit_note,
+                          color: colorScheme.primary,
+                        ),
                       ),
                     )
                   ],
@@ -297,6 +281,8 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildSearchResultsCount() {
+    final theme = Theme.of(context);
+
     if (!_hasSearched || _isSearching || _notes.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -305,9 +291,7 @@ class _SearchPageState extends State<SearchPage> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Text(
         'Ditemukan ${_notes.length} catatan',
-        style: TextStyle(
-          fontSize: 14,
-          color: Colors.grey[600],
+        style: theme.textTheme.bodySmall?.copyWith(
           fontWeight: FontWeight.w500,
         ),
       ),
@@ -316,17 +300,21 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
         title: TextField(
           controller: _keywordController,
           autofocus: true,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             hintText: 'Cari catatan...',
-            hintStyle: TextStyle(color: Colors.grey),
+            hintStyle: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.hintColor,
+            ),
             border: InputBorder.none,
           ),
-          style: const TextStyle(fontSize: 16),
+          style: theme.textTheme.bodyMedium?.copyWith(fontSize: 16),
           textInputAction: TextInputAction.search,
         ),
         actions: [
@@ -344,9 +332,7 @@ class _SearchPageState extends State<SearchPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSearchResultsCount(),
-          Expanded(
-            child: _buildSearchResults(),
-          ),
+          Expanded(child: _buildSearchResults()),
         ],
       ),
     );

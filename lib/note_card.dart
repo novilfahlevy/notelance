@@ -16,10 +16,15 @@ class NoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final Color? primaryColor = theme.colorScheme.primary;
+    final Color? onSurfaceColor = theme.colorScheme.onSurface;
+    final Color? onSurfaceColorMuted = theme.colorScheme.onSurface.withOpacity(0.7);
+
     return Card(
       elevation: 0,
       shadowColor: Colors.transparent,
-      color: Colors.orangeAccent,
+      color: theme.cardColor, // Use theme card color
       shape: const BeveledRectangleBorder(),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -29,10 +34,10 @@ class NoteCard extends StatelessWidget {
             if (note.title.isNotEmpty) ...[
               Text(
                 note.title,
-                style: const TextStyle(
+                style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 24,
-                    color: Colors.white),
+                    color: onSurfaceColor), // Use theme text color
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -45,23 +50,24 @@ class NoteCard extends StatelessWidget {
                 data: note.content!,
                 style: {
                   "body": Style(
-                    color: Colors.white,
+                    color: onSurfaceColor, // Use theme text color
                     margin: Margins.all(0),
                     padding: HtmlPaddings.all(0),
                   ),
                   'p': Style(
-                    color: Colors.white,
+                    color: onSurfaceColor, // Use theme text color
                     margin: Margins.all(0),
                     padding: HtmlPaddings.all(0),
                   ),
                   '*': Style(
+                    color: onSurfaceColor, // Use theme text color
                     margin: Margins.all(0),
                     padding: HtmlPaddings.all(0),
                   ),
                 },
               ),
             ),
-            const Divider(color: Colors.white54, height: 0, thickness: 0.5),
+            Divider(color: theme.dividerColor.withOpacity(0.5), height: 0, thickness: 0.5), // Use theme divider color
             const SizedBox(
               height: 15,
             ),
@@ -70,17 +76,17 @@ class NoteCard extends StatelessWidget {
               children: [
                 Text(
                   formatDate(DateTime.parse(note.updatedAt!)),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white,
+                    color: onSurfaceColorMuted, // Use theme muted text color
                   ),
                 ),
                 InkWell(
                   onTap: () => onEdit(note),
                   borderRadius: BorderRadius.circular(20),
-                  child: const Padding(
-                    padding: EdgeInsets.all(4), // Small touch target
-                    child: Icon(Icons.edit_note, color: Colors.white),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.edit_note, color: primaryColor,),
                   ),
                 )
               ],

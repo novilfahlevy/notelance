@@ -13,7 +13,7 @@ class DeleteNoteDialog {
           'Hapus Catatan?',
           style: TextStyle(
             fontSize: 16,
-            color: Colors.black,
+            // color: Colors.black, // Removed to use theme color
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -36,7 +36,7 @@ class DeleteNoteDialog {
             child: const Text(
               'Hapus',
               style: TextStyle(
-                color: Colors.red,
+                color: Colors.red, // Kept for semantic meaning
                 fontWeight: FontWeight.bold,
               ),
             ),

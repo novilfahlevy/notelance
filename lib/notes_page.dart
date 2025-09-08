@@ -17,7 +17,8 @@ class NotesPage extends StatefulWidget {
   State<NotesPage> createState() => _NotesPageState();
 }
 
-class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixin {
+class _NotesPageState extends State<NotesPage>
+    with AutomaticKeepAliveClientMixin {
   List<Note> _notes = [];
   bool _isLoading = true;
   final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
@@ -58,13 +59,11 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
   }
 
   void _goToNoteEditor(Note note) {
-    // Navigate to note editor with the selected note data
     Navigator.pushNamed(
       context,
       NoteEditorPage.path,
       arguments: note,
     ).then((_) {
-      // Refresh the notes list when returning from editor
       _loadNotes();
     });
   }
@@ -94,32 +93,45 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
   Widget build(BuildContext context) {
     super.build(context);
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
-          color: Colors.orangeAccent,
+          color: colorScheme.primary,
         ),
       );
     }
 
     if (_notes.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      return RefreshIndicator(
+        onRefresh: _loadNotes,
+        color: colorScheme.primary,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            Text(
-              'Belum ada catatan ${widget.category?.name ?? 'umum'}',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Tekan tombol + untuk membuat catatan baru',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[500],
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.8,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Belum ada catatan ${widget.category?.name ?? 'umum'}',
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: theme.textTheme.bodyLarge?.color?.withOpacity(0.7),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tekan tombol + untuk membuat catatan baru',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -129,20 +141,32 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
 
     return RefreshIndicator(
       onRefresh: _loadNotes,
-      color: Colors.orangeAccent,
+      color: colorScheme.primary,
       child: ListView.separated(
         padding: const EdgeInsets.all(10),
+        physics: const AlwaysScrollableScrollPhysics(), // 👈 ensures pull even if few items
         itemCount: _notes.length,
         itemBuilder: (context, index) {
+          if (index >= _notes.length - 1) {
+            return Column(
+              children: [
+                NoteCard(
+                  note: _notes[index],
+                  onEdit: _goToNoteEditor,
+                  formatDate: _formatDate,
+                ),
+                SizedBox(height: 300,)
+              ],
+            );
+          }
+
           return NoteCard(
             note: _notes[index],
             onEdit: _goToNoteEditor,
             formatDate: _formatDate,
           );
         },
-        separatorBuilder: (context, index) {
-          return const SizedBox(height: 8);
-        },
+        separatorBuilder: (context, index) => const SizedBox(height: 8),
       ),
     );
   }

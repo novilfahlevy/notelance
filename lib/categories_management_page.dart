@@ -195,7 +195,8 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Kategori dengan nama "$categoryName" sudah ada'),
-                        backgroundColor: Colors.orange,
+                        backgroundColor: Theme.of(context).colorScheme.surfaceVariant, // Use theme color
+                        behavior: SnackBarBehavior.floating,
                       ),
                     );
                     return;
@@ -247,7 +248,8 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Kategori dengan nama "$newCategoryName" sudah ada'),
-                        backgroundColor: Colors.orange,
+                        backgroundColor: Theme.of(context).colorScheme.surfaceVariant, // Use theme color
+                        behavior: SnackBarBehavior.floating,
                       ),
                     );
                     return;
@@ -299,6 +301,10 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final Color? subtleTextColor = theme.textTheme.bodyMedium?.color?.withOpacity(0.7);
+    final Color? subtleIconColor = theme.iconTheme.color?.withOpacity(0.7);
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Kelola Kategori'),
@@ -314,16 +320,16 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.folder_open, size: 64, color: Colors.grey),
+            Icon(Icons.folder_open, size: 64, color: subtleIconColor ?? theme.disabledColor),
             SizedBox(height: 16),
             Text(
               'Belum ada kategori',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
+              style: TextStyle(fontSize: 18, color: subtleTextColor ?? theme.disabledColor),
             ),
             SizedBox(height: 8),
             Text(
               'Tap tombol + untuk menambah kategori',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(color: subtleTextColor ?? theme.disabledColor),
             ),
           ],
         ),
@@ -345,7 +351,7 @@ class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
                       contentPadding: EdgeInsets.only(left: 10, right: 10),
                       leading: ReorderableDragStartListener(
                         index: index,
-                        child: Icon(Icons.drag_handle, color: Colors.grey.shade600),
+                        child: Icon(Icons.drag_handle, color: theme.iconTheme.color?.withOpacity(0.6) ?? theme.disabledColor),
                       ),
                       title: Text(category.name),
                       trailing: Row(

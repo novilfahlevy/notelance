@@ -76,9 +76,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   Color get _categoryDisplayColor {
-    return (_category != null || _pendingNewCategoryName.isNotEmpty)
-        ? Colors.blueAccent
-        : Colors.grey;
+    final theme = Theme.of(context);
+    if (_category != null || _pendingNewCategoryName.isNotEmpty) {
+      return theme.colorScheme.primary; // Use theme's primary color
+    } else {
+      return theme.colorScheme.onSurface.withOpacity(0.6); // Use theme's muted text color
+    }
   }
 
   // ===== LIFECYCLE METHODS =====
@@ -581,27 +584,38 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Future<bool> _askExitConfirmation() async {
     if (!_hasUnsavedChanges) return true;
 
+    final theme = Theme.of(context);
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         shape: const BeveledRectangleBorder(),
-        title: const Text(
+        backgroundColor: theme.colorScheme.surface, // Use theme surface color
+        title: Text(
           'Batalkan penulisan?',
           style: TextStyle(
             fontSize: 16,
-            color: Colors.black,
+            color: theme.colorScheme.onSurface, // Use theme text color
             fontWeight: FontWeight.bold,
           ),
         ),
-        content: const Text('Perubahan akan hilang jika belum disimpan.'),
+        content: Text(
+          'Perubahan akan hilang jika belum disimpan.',
+          style: TextStyle(color: theme.colorScheme.onSurface), // Use theme text color
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Tetap menulis'),
+            child: Text(
+              'Tetap menulis',
+              style: TextStyle(color: theme.colorScheme.primary), // Use theme primary color
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Keluar', style: TextStyle(color: Colors.red)),
+            child: Text(
+              'Keluar',
+              style: TextStyle(color: theme.colorScheme.error), // Use theme error color
+            ),
           ),
         ],
       ),
@@ -619,10 +633,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   void _showErrorSnackBar(String message) {
     if (!mounted || !context.mounted) return;
+    final theme = Theme.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
+        content: Text(message, style: TextStyle(color: Colors.white),),
+        backgroundColor: theme.colorScheme.error, // Use theme error color
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -632,8 +647,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     if (!mounted || !context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
+        content: Text(message, style: TextStyle(color: Colors.white),),
+        backgroundColor: Colors.green, // Keep green for success
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -642,10 +657,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   // ===== BUILD METHOD =====
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(title: const Text('Memuat...')),
-        body: const Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: CircularProgressIndicator(
+            color: theme.colorScheme.primary, // Use theme primary color
+          ),
+        ),
       );
     }
 
@@ -659,7 +680,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
+            icon: Icon(
+              Icons.arrow_back,
+              color: theme.appBarTheme.iconTheme?.color ?? theme.colorScheme.onSurface,
+            ),
             onPressed: _handleBackPressed,
           ),
           actions: [
@@ -670,7 +694,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 child: Text(
                   _isDeleting ? 'Menghapus...' : 'Hapus',
                   style: TextStyle(
-                    color: _isDeleting ? Colors.grey : Colors.redAccent,
+                    color: _isDeleting
+                        ? theme.colorScheme.onSurface.withOpacity(0.3)
+                        : theme.colorScheme.error, // Use theme error color
                     fontWeight: FontWeight.w500,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -692,7 +718,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               child: Text(
                 'Simpan',
                 style: TextStyle(
-                  color: (_isSaving || _isDeleting) ? Colors.grey : Colors.orangeAccent,
+                  color: (_isSaving || _isDeleting)
+                      ? theme.colorScheme.onSurface.withOpacity(0.3)
+                      : theme.colorScheme.primary, // Use theme primary color
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -707,14 +735,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Judul catatan',
-                  hintStyle: TextStyle(fontSize: 18, color: Colors.grey),
+                  hintStyle: TextStyle(
+                    fontSize: 18,
+                    color: theme.colorScheme.onSurface.withOpacity(0.6), // Use theme muted text color
+                  ),
                   border: InputBorder.none,
                 ),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onSurface, // Use theme text color
                 ),
                 maxLines: 1,
                 textInputAction: TextInputAction.next,
@@ -733,10 +765,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   autoFocus: false,
                   customStyles: DefaultStyles(
                     paragraph: DefaultTextBlockStyle(
-                      const TextStyle(
+                      TextStyle(
                         fontSize: 16,
                         height: 1.4,
-                        color: Colors.black,
+                        color: theme.colorScheme.onSurface, // Use theme text color
                       ),
                       HorizontalSpacing.zero,
                       VerticalSpacing.zero,
@@ -744,9 +776,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       null,
                     ),
                     placeHolder: DefaultTextBlockStyle(
-                      const TextStyle(
+                      TextStyle(
                         fontSize: 16,
-                        color: Colors.grey,
+                        color: theme.colorScheme.onSurface.withOpacity(0.6), // Use theme muted text color
                         height: 1.4,
                       ),
                       HorizontalSpacing.zero,
@@ -758,42 +790,53 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               ),
             ),
-            QuillSimpleToolbar(
-              controller: _contentController,
-              config: const QuillSimpleToolbarConfig(
-                multiRowsDisplay: false,
-
-                // Active
-                showBoldButton: true,
-                showItalicButton: true,
-                showUnderLineButton: true,
-                showListNumbers: true,
-                showListBullets: true,
-                showHeaderStyle: true,
-                showLink: true,
-                showListCheck: false,
-
-                // Unactive
-                showUndo: false,
-                showRedo: false,
-                showFontFamily: false,
-                showFontSize: false,
-                showStrikeThrough: false,
-                showInlineCode: false,
-                showColorButton: false,
-                showBackgroundColorButton: false,
-                showClearFormat: false,
-                showAlignmentButtons: false,
-                showDirection: false,
-                showCodeBlock: false,
-                showQuote: false,
-                showIndent: false,
-                showSearchButton: false,
-                showSubscript: false,
-                showSuperscript: false,
-                showSmallButton: false,
+            Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface, // Use theme surface color
+                border: Border(
+                  top: BorderSide(
+                    color: theme.colorScheme.outline.withOpacity(0.2), // Use theme outline color
+                    width: 0.5,
+                  ),
+                ),
               ),
-            )
+              child: QuillSimpleToolbar(
+                controller: _contentController,
+                config: const QuillSimpleToolbarConfig(
+                  multiRowsDisplay: false,
+
+                  // Active
+                  showBoldButton: true,
+                  showItalicButton: true,
+                  showUnderLineButton: true,
+                  showListNumbers: true,
+                  showListBullets: true,
+                  showHeaderStyle: true,
+                  showLink: true,
+                  showListCheck: false,
+
+                  // Unactive
+                  showUndo: false,
+                  showRedo: false,
+                  showFontFamily: false,
+                  showFontSize: false,
+                  showStrikeThrough: false,
+                  showInlineCode: false,
+                  showColorButton: false,
+                  showBackgroundColorButton: false,
+                  showClearFormat: false,
+                  showAlignmentButtons: false,
+                  showDirection: false,
+                  showCodeBlock: false,
+                  showQuote: false,
+                  showIndent: false,
+                  showSearchButton: false,
+                  showSubscript: false,
+                  showSuperscript: false,
+                  showSmallButton: false,
+                ),
+              ),
+            ),
           ],
         ),
       ),
