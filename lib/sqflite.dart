@@ -71,6 +71,7 @@ class LocalDatabaseService {
       await db.execute('''
       CREATE TABLE IF NOT EXISTS Categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        remote_id INTEGER,
         name TEXT NOT NULL,
         order_index INTEGER DEFAULT 0,
         created_at INTEGER
@@ -81,6 +82,7 @@ class LocalDatabaseService {
       await db.execute('''
       CREATE TABLE IF NOT EXISTS Notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        remote_id INTEGER,
         title TEXT NOT NULL,
         content TEXT,
         category_id INTEGER,
@@ -161,15 +163,34 @@ class LocalDatabaseService {
     }
   }
 
+  Future<Category?> getCategoryByName(String name) async {
+    if (_database == null) throw Exception('Database not initialized');
+
+    try {
+      final List<Map<String, dynamic>> categoriesFromDb = await _database!.query(
+          'Categories',
+          where: 'LOWER(name) = ?',
+          whereArgs: [name.toLowerCase().trim()]
+      );
+
+      if (categoriesFromDb.isEmpty) return null;
+
+      return Category.fromJson(categoriesFromDb.first);
+    } catch (e) {
+      _logger.e('Error getting category: $e');
+      rethrow;
+    }
+  }
+
   /// Create a new category (updated to include order)
-  Future<Category> createCategory(String name, {int? order}) async {
+  Future<Category> createCategory(String name, {int? order, Transaction? txn}) async {
     if (_database == null) throw Exception('Database not initialized');
 
     try {
       // If no order specified, get the next available order
-      int categoryOrder = order ?? await _getNextCategoryOrder();
+      int categoryOrder = order ?? await _getNextCategoryOrder(txn: txn);
 
-      final categoryId = await _database!.insert(
+      final categoryId = await (txn ?? _database)!.insert(
         'Categories',
         {
           'name': name,
@@ -188,13 +209,18 @@ class LocalDatabaseService {
   }
 
   /// Update a category
-  Future<void> updateCategory(int categoryId, String newName, {int? newOrder}) async {
+  Future<void> updateCategory(int categoryId, String newName, {int? newOrder, int? remoteId}) async {
     if (_database == null) throw Exception('Database not initialized');
 
     try {
       Map<String, dynamic> updateData = {'name': newName};
+
       if (newOrder != null) {
         updateData['order_index'] = newOrder;
+      }
+
+      if (remoteId != null) {
+        updateData['remote_id'] = remoteId;
       }
 
       final updatedRows = await _database!.update(
@@ -243,9 +269,9 @@ class LocalDatabaseService {
   }
 
   /// Get next available category order
-  Future<int> _getNextCategoryOrder() async {
+  Future<int> _getNextCategoryOrder({ Transaction? txn }) async {
     try {
-      final result = await _database!.rawQuery(
+      final result = await (txn ?? _database)!.rawQuery(
           'SELECT COALESCE(MAX(order_index), -1) + 1 as next_order FROM Categories'
       );
       return result.first['next_order'] as int;
@@ -490,19 +516,6 @@ class LocalDatabaseService {
   }
 }
 
-var logger = Logger();
-
 // Backward compatibility - provide access to the database instance
 // This allows existing code to work with minimal changes
 LocalDatabaseService get localDatabase => LocalDatabaseService.instance;
-
-/// Initialize the database - call this in main()
-Future<void> loadSQFLite() async {
-  try {
-    await LocalDatabaseService.instance.initialize();
-    logger.d('Database service loaded successfully');
-  } catch (e) {
-    logger.e('Error loading database service: ${e.toString()}');
-    rethrow;
-  }
-}

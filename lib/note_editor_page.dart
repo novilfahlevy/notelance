@@ -1,16 +1,21 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_quill/flutter_quill.dart';
+import 'dart:io' show Platform;
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:delta_to_html/delta_to_html.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
+import 'package:logger/logger.dart';
+import 'package:notelance/categories_dialog.dart';
+import 'package:notelance/delete_note_dialog.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:notelance/sqflite.dart';
-import 'package:notelance/categories_dialog.dart';
-import 'package:notelance/delete_note_dialog.dart';
-import 'package:logger/logger.dart';
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 var logger = Logger();
 
@@ -24,22 +29,33 @@ class NoteEditorPage extends StatefulWidget {
 }
 
 class _NoteEditorPageState extends State<NoteEditorPage> {
-  int? _noteId;
+  // ===== PROPERTIES =====
+  // Core properties
+  Note? _note;
   bool _isInitialized = false;
   final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
 
+  // Controllers
   final TextEditingController _titleController = TextEditingController();
   final QuillController _contentController = QuillController.basic();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _editorFocusNode = FocusNode();
 
+  // Category management
   Category? _category;
   List<Category> _categories = [];
   String _pendingNewCategoryName = ''; // Store pending new category name
 
+  // Change tracking
   String _initialTitle = '';
   int _initialContentDeltaHashCode = 0;
 
+  // Loading states
+  bool _isSaving = false;
+  bool _isLoading = true;
+  bool _isDeleting = false;
+
+  // ===== COMPUTED PROPERTIES =====
   bool get _hasUnsavedChanges {
     if (!_isInitialized) return false;
 
@@ -49,10 +65,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         _initialContentDeltaHashCode != contentDeltaHashCode;
   }
 
-  bool _isSaving = false;
-  bool _isLoading = true;
-  bool _isDeleting = false;
+  String get _categoryDisplayText {
+    if (_category != null) {
+      return _category!.name;
+    } else if (_pendingNewCategoryName.isNotEmpty) {
+      return "Baru: $_pendingNewCategoryName";
+    } else {
+      return 'Pilih Kategori';
+    }
+  }
 
+  Color get _categoryDisplayColor {
+    return (_category != null || _pendingNewCategoryName.isNotEmpty)
+        ? Colors.blueAccent
+        : Colors.grey;
+  }
+
+  // ===== LIFECYCLE METHODS =====
   @override
   void initState() {
     super.initState();
@@ -66,7 +95,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     if (!_isInitialized) {
       final arguments = ModalRoute.of(context)?.settings.arguments;
       if (arguments is Note) {
-        _noteId = arguments.id;
+        setState(() {
+          _note = arguments;
+        });
       }
     }
   }
@@ -80,6 +111,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     super.dispose();
   }
 
+  // ===== INITIALIZATION METHODS =====
   Future<void> _initialize() async {
     if (_isInitialized) return;
 
@@ -87,7 +119,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     try {
       await _loadCategories();
-      if (_noteId != null) await _loadNote();
+      if (_note != null) await _loadNote();
 
       setState(() {
         _isInitialized = true;
@@ -100,22 +132,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  int _setInitialContent(String content) {
+  Future<void> _loadCategories() async {
+    if (!_databaseService.isInitialized) return;
+
     try {
-      final delta = HtmlToDelta().convert(content);
-      _contentController.document = Document.fromDelta(delta);
-      return delta.hashCode;
+      final categories = await _databaseService.getCategories();
+
+      if (!mounted) return;
+
+      setState(() => _categories = categories);
     } catch (e) {
-      logger.e('Error setting initial content: $e');
-      return 0;
+      logger.e('Error loading categories: $e');
     }
   }
 
   Future<void> _loadNote() async {
-    if (!_databaseService.isInitialized || _noteId == null) return;
+    if (!_databaseService.isInitialized || _note == null || _note!.id == null) return;
 
     try {
-      final note = await _databaseService.getNoteById(_noteId!);
+      final note = await _databaseService.getNoteById(_note!.id!);
 
       if (note == null) {
         _showErrorSnackBar('Catatan tidak ditemukan');
@@ -124,6 +159,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       }
 
       if (!mounted) return;
+
+      // Update the stored note object with fresh data
+      setState(() {
+        _note = note;
+      });
 
       // Find the note's category
       if (note.categoryId != null) {
@@ -143,33 +183,41 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  Future<void> _loadCategories() async {
-    if (!_databaseService.isInitialized) return;
-
+  int _setInitialContent(String content) {
     try {
-      final categories = await _databaseService.getCategories();
-
-      if (!mounted) return;
-
-      setState(() => _categories = categories);
+      final delta = HtmlToDelta().convert(content);
+      _contentController.document = Document.fromDelta(delta);
+      return delta.hashCode;
     } catch (e) {
-      logger.e('Error loading categories: $e');
+      logger.e('Error setting initial content: $e');
+      return 0;
     }
   }
 
-  Future<void> _showCategoriesDialog() async {
+  // ===== CATEGORY MANAGEMENT METHODS =====
+  Future<void> _showCategoriesDialog({String? newCategoryNameInputError}) async {
     final result = await CategoriesDialog.show(
       context: context,
       categories: _categories,
       selectedCategory: _category,
+      newCategoryNameInputError: newCategoryNameInputError,
     );
 
     if (result != null) {
       if (result.isNewCategory) {
+        final categoryName = result.newCategoryName?.trim();
+        final validationError = await _validateNewCategoryName(categoryName);
+
+        if (validationError != null) {
+          // Re-show dialog with error
+          if (mounted) _showCategoriesDialog(newCategoryNameInputError: validationError);
+          return;
+        }
+
         // Store the new category name to be created during save
         setState(() {
           _category = null;
-          _pendingNewCategoryName = result.newCategoryName!;
+          _pendingNewCategoryName = categoryName!;
         });
       } else {
         // Use existing category
@@ -181,17 +229,134 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  Future<bool> _showDeleteConfirmation() async {
-    if (_noteId == null) return false; // Can't delete unsaved note
-
-    return await DeleteNoteDialog.show(
-      context: context,
-      noteTitle: _titleController.text.trim(),
-    );
+  Future<String?> _validateNewCategoryName(String? name) async {
+    if (name == null || name.trim().isEmpty) {
+      return 'Nama kategori tidak boleh kosong.';
+    }
+    final existingCategory = await _databaseService.getCategoryByName(name.trim());
+    if (existingCategory != null) {
+      return 'Kategori "${name.trim()}" sudah ada.';
+    }
+    return null;
   }
 
-  Future<void> _deleteNote() async {
-    if (_noteId == null || _isDeleting) return;
+  Future<Category> _createNewCategory(String categoryName) async {
+    // Safeguard: Check for existing category before creation
+    final existingCategory = await _databaseService.getCategoryByName(categoryName.trim());
+    if (existingCategory != null) {
+      logger.e('Attempted to create a category that already exists: "${categoryName.trim()}"');
+      throw Exception('Kategori "${categoryName.trim()}" sudah ada.');
+    }
+
+    try {
+      if (_databaseService.database == null) {
+        throw Exception('Database is not initialized.');
+      }
+
+      // Create category in the local database first
+      final newCategory = await _databaseService.createCategory(categoryName.trim());
+
+      // Reload categories in the categories selector
+      await _loadCategories();
+
+      // Reload categories in the main page's appbar
+      if (mounted) context.read<CategoriesNotifier>().reloadCategories();
+
+      logger.d('Category created with ID: ${newCategory.id}');
+
+      // Then save the category in the remote database
+      await _saveCategoryInRemoteDatabase(newCategory);
+
+      return newCategory;
+    } catch (e) {
+      logger.e('Error in _createNewCategory method: $e');
+      rethrow;
+    }
+  }
+
+  // ===== SAVE METHODS =====
+  Future<void> _save() async {
+    if (_isSaving) return;
+
+    if (_titleController.text.trim().isEmpty) {
+      _showErrorSnackBar('Judul catatan tidak boleh kosong');
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      // Handle new category creation if pending
+      Category? attachedCategory = _category;
+      if (attachedCategory == null && _pendingNewCategoryName.isNotEmpty) {
+        // Validate again before actual creation, as a final check
+        final validationError = await _validateNewCategoryName(_pendingNewCategoryName);
+        if (validationError != null) {
+          if (mounted) setState(() => _isSaving = false);
+          return;
+        }
+        attachedCategory = await _createNewCategory(_pendingNewCategoryName);
+      }
+
+      final String title = _titleController.text.trim();
+      final Delta delta = _contentController.document.toDelta();
+      final String now = DateTime.now().toIso8601String();
+      final bool isNewNote = _note == null || _note!.id == null;
+
+      if (isNewNote) {
+        // Create new note object
+        setState(() {
+          _note = Note(
+            title: title,
+            content: DeltaToHTML.encodeJson(delta.toJson()),
+            categoryId: attachedCategory?.id,
+            createdAt: now,
+            updatedAt: now,
+          );
+        });
+
+        await _createNoteInLocalDatabase();
+      } else {
+        // Update existing note
+        final existingCreatedAt = await _getCreatedAtOfExistingNote();
+        setState(() {
+          _note = _note!.copyWith(
+            title: title,
+            content: DeltaToHTML.encodeJson(delta.toJson()),
+            categoryId: attachedCategory?.id,
+            updatedAt: now,
+            createdAt: existingCreatedAt,
+          );
+        });
+
+        await _updateNoteInLocalDatabase();
+      }
+
+      // Save to remote database
+      await _saveNoteInRemoteDatabase();
+
+      // Update initial states
+      setState(() {
+        _initialTitle = title;
+        _initialContentDeltaHashCode = delta.hashCode;
+        _category = attachedCategory;
+        _pendingNewCategoryName = '';
+      });
+
+      _showSuccessSnackBar(
+        isNewNote ? 'Catatan berhasil disimpan' : 'Catatan berhasil diperbarui',
+      );
+    } catch (e) {
+      logger.e('Error in _save method: $e');
+      _showErrorSnackBar('Gagal menyimpan catatan: ${e.toString()}');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  // ===== DELETE METHODS =====
+  Future<void> _delete() async {
+    if (_note == null || _note!.id == null || _isDeleting) return;
 
     final shouldDelete = await _showDeleteConfirmation();
     if (!shouldDelete) return;
@@ -199,9 +364,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     setState(() => _isDeleting = true);
 
     try {
-      await _databaseService.deleteNote(_noteId!);
+      await _databaseService.deleteNote(_note!.id!);
+      await _deleteNoteInRemoteDatabase();
 
-      logger.d('Note deleted successfully with ID: $_noteId');
+      logger.d('Note deleted successfully with ID: ${_note!.id}');
       _showSuccessSnackBar('Catatan berhasil dihapus');
 
       // Wait a moment for the snackbar to show, then navigate back
@@ -220,31 +386,45 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  Future<int> _createNewNote(Note note) async {
+  // ===== LOCAL DATABASE METHODS =====
+  Future<void> _createNoteInLocalDatabase() async {
+    if (_note == null) {
+      throw Exception('Note is null, cannot create in database');
+    }
+
     try {
-      final savedNoteId = await _databaseService.createNote(note);
-      setState(() => _noteId = savedNoteId);
+      final savedNoteId = await _databaseService.createNote(_note!);
+      setState(() {
+        _note = _note!.copyWith(id: savedNoteId);
+      });
       logger.d('New note saved with ID: $savedNoteId');
-      return savedNoteId;
     } catch (e) {
-      logger.e('Error in _createNewNote method: $e');
+      logger.e('Error creating note in local database: $e');
       rethrow;
     }
   }
 
-  Future<void> _updateNote(Note note) async {
+  Future<void> _updateNoteInLocalDatabase() async {
+    if (_note == null || _note!.id == null) {
+      throw Exception('Note or note ID is null, cannot update in database');
+    }
+
     try {
-      await _databaseService.updateNote(note);
-      logger.d('Note updated with ID: $_noteId');
+      await _databaseService.updateNote(_note!);
+      logger.d('Note updated with ID: ${_note!.id}');
     } catch (e) {
-      logger.e('Error in _updateNote method: $e');
+      logger.e('Error updating note in local database: $e');
       rethrow;
     }
   }
 
   Future<String> _getCreatedAtOfExistingNote() async {
     try {
-      final existingNote = await _databaseService.getNoteById(_noteId!);
+      if (_note?.createdAt != null) {
+        return _note!.createdAt!;
+      }
+
+      final existingNote = await _databaseService.getNoteById(_note!.id!);
 
       if (existingNote != null) {
         return existingNote.createdAt!;
@@ -257,95 +437,148 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  Future<Category> _createNewCategory(String categoryName) async {
+  Future<void> _updateCategoryRemoteIdInLocalDatabase(Category category) async {
     try {
-      final newCategory = await _databaseService.createCategory(categoryName);
-
-      // Reload categories to include the new one
-      await _loadCategories();
-
-      if (mounted) {
-        // Reload categories in the main page's appbar
-        context.read<CategoriesNotifier>().reloadCategories();
-      }
-
-      logger.d('Category created with ID: ${newCategory.id}');
-
-      return newCategory;
+      await _databaseService.updateCategory(category.id!, category.name, remoteId: category.remoteId);
+      logger.d('Category updated locally with ID: ${category.id}');
     } catch (e) {
-      logger.e('Error in _createNewCategory method: $e');
-      rethrow;
+      logger.e('Error in _updateCategoryRemoteIdInLocalDatabase method: $e');
     }
   }
 
-  Future<void> _save() async {
-    if (_isSaving) return;
-
-    final title = _titleController.text.trim();
-
-    if (title.isEmpty) {
-      _showErrorSnackBar('Judul catatan tidak boleh kosong');
+  // ===== REMOTE DATABASE METHODS =====
+  Future<void> _saveNoteInRemoteDatabase() async {
+    if (_note == null) {
+      logger.w("Cannot save note to remote database: Note is null");
       return;
     }
 
-    setState(() => _isSaving = true);
+    if (!(await _isDeviceConnectedToInternet())) {
+      logger.w("Can't save the note with id \"${_note!.id}\" to the remote database: No internet connection is available.");
+      return;
+    }
 
     try {
-      final Delta delta = _contentController.document.toDelta();
-      final String now = DateTime.now().toIso8601String();
-      Category? attachedCategory = _category;
-
-      // Handle new category creation if pending
-      if (attachedCategory == null && _pendingNewCategoryName.isNotEmpty) {
-        attachedCategory = await _createNewCategory(_pendingNewCategoryName);
-      }
-
-      final bool isNewNote = _noteId == null;
-
-      if (isNewNote) {
-        // For new notes, create the complete Note object
-        final note = Note(
-          title: title,
-          content: DeltaToHTML.encodeJson(delta.toJson()),
-          categoryId: attachedCategory?.id,
-          createdAt: now,
-          updatedAt: now,
-        );
-        await _createNewNote(note);
-      } else {
-        // For existing notes, create Note object with existing created_at
-        final createdAt = await _getCreatedAtOfExistingNote();
-        final note = Note(
-          id: _noteId,
-          title: title,
-          content: DeltaToHTML.encodeJson(delta.toJson()),
-          categoryId: attachedCategory?.id,
-          createdAt: createdAt,
-          updatedAt: now,
-        );
-        await _updateNote(note);
-      }
-
-      // Refresh all states with the new/updated category
-      setState(() {
-        _initialTitle = title;
-        _initialContentDeltaHashCode = delta.hashCode;
-        _category = attachedCategory;
-        _pendingNewCategoryName = ''; // Clear pending category name
-      });
-
-      _showSuccessSnackBar(
-        isNewNote ? 'Catatan berhasil disimpan' : 'Catatan berhasil diperbarui',
+      final FunctionResponse response = await Supabase.instance.client.functions.invoke(
+        'hello-world/sync-send',
+        method: HttpMethod.post,
+        body: _note!.toJson(),
       );
-    } catch (e) {
-      logger.e('Error in _save method: $e');
-      _showErrorSnackBar('Gagal menyimpan catatan: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
+
+      if (response.data['message'] == 'NOTE_IS_SUCCESSFULLY_SYNCED') {
+        final int noteRemoteId = response.data['remote_id'];
+
+        setState(() {
+          _note = _note!.copyWith(remoteId: noteRemoteId);
+        });
+
+        // Update the remote ID in local database
+        await _updateNoteInLocalDatabase();
+      }
+    } on Exception catch (e) {
+      logger.e('Error saving note in remote database: $e');
     }
   }
 
-  Future<bool> _showExitConfirmation() async {
+  Future<void> _deleteNoteInRemoteDatabase() async {
+    if (_note == null) {
+      _showErrorSnackBar('Catatan tidak ditemukan.');
+      return;
+    }
+
+    if (!(await _isDeviceConnectedToInternet())) {
+      logger.w("Can't delete the note \"${_note?.title ?? ''}\" in the remote database: No internet connection is available.");
+      return;
+    }
+
+    try {
+      final FunctionResponse response = await Supabase.instance.client.functions.invoke(
+          'hello-world/notes/${_note!.remoteId}',
+          method: HttpMethod.delete
+      );
+
+      if (response.data['message'] == 'CATEGORY_IS_DELETED_SUCCESSFULLY') {
+        if (mounted) {
+          Navigator.of(context).pop();
+        } else {
+          _showErrorSnackBar('Catatan tidak ditemukan.');
+        }
+      }
+    } on Exception catch (e) {
+      logger.e('Error in _deleteNoteInRemoteDatabase method: $e');
+    }
+  }
+
+  Future<void> _saveCategoryInRemoteDatabase(Category category) async {
+    if (!(await _isDeviceConnectedToInternet())) {
+      logger.w("Can't save the new category \"${category.name}\" to the remote database: No internet connection is available.");
+      return;
+    }
+
+    try {
+      final FunctionResponse response = await Supabase.instance.client.functions.invoke(
+        'hello-world/categories',
+        method: HttpMethod.post,
+        body: category.toJson(),
+      );
+
+      if (response.data['message'] == 'CATEGORY_IS_CREATED_SUCCESSFULLY') {
+        final int categoryRemoteId = response.data['remote_id'];
+
+        // Update the remote id of the note in local database
+        category.remoteId = categoryRemoteId;
+        await _updateCategoryRemoteIdInLocalDatabase(category);
+      }
+    } on Exception catch (e) {
+      logger.e('Error in _saveCategoryInRemoteDatabase method: $e');
+    }
+  }
+
+  // ===== UTILITY METHODS =====
+  Future<bool> _isDeviceConnectedToInternet() async {
+    // --- VERCEL ---
+    if (Platform.environment.containsKey('VERCEL')) {
+      return true;
+    }
+
+    // --- WEB ---
+    if (kIsWeb) {
+      return true; // Or use a JavaScript interop to check window.navigator.onLine
+    }
+
+    // --- MOBILE / DESKTOP ---
+    if (Platform.isAndroid || Platform.isIOS || Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+      try {
+        final connectivityResult = await Connectivity().checkConnectivity();
+        if (connectivityResult.contains(ConnectivityResult.mobile) ||
+            connectivityResult.contains(ConnectivityResult.wifi) ||
+            connectivityResult.contains(ConnectivityResult.ethernet) ||
+            connectivityResult.contains(ConnectivityResult.vpn)) {
+          return true;
+        } else if (connectivityResult.contains(ConnectivityResult.none)) {
+          return false;
+        }
+        return false;
+      } catch (e) {
+        logger.e('Error checking connectivity: $e');
+        return false;
+      }
+    }
+    logger.e('Connectivity check not supported on this platform or assuming offline.');
+    return false;
+  }
+
+  // ===== UI HELPER METHODS =====
+  Future<bool> _showDeleteConfirmation() async {
+    if (_note == null || _note!.id == null) return false; // Can't delete unsaved note
+
+    return await DeleteNoteDialog.show(
+      context: context,
+      noteTitle: _titleController.text.trim(),
+    );
+  }
+
+  Future<bool> _askExitConfirmation() async {
     if (!_hasUnsavedChanges) return true;
 
     final result = await showDialog<bool>(
@@ -377,8 +610,15 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     return result ?? false;
   }
 
+  Future<void> _handleBackPressed() async {
+    final shouldPop = await _askExitConfirmation();
+    if (shouldPop && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
   void _showErrorSnackBar(String message) {
-    if (!mounted) return;
+    if (!mounted || !context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -389,7 +629,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   void _showSuccessSnackBar(String message) {
-    if (!mounted) return;
+    if (!mounted || !context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -399,29 +639,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     );
   }
 
-  Future<void> _handleBackPressed() async {
-    final shouldPop = await _showExitConfirmation();
-    if (shouldPop && mounted) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  String get _categoryDisplayText {
-    if (_category != null) {
-      return _category!.name;
-    } else if (_pendingNewCategoryName.isNotEmpty) {
-      return "Baru: $_pendingNewCategoryName";
-    } else {
-      return 'Pilih Kategori';
-    }
-  }
-
-  Color get _categoryDisplayColor {
-    return (_category != null || _pendingNewCategoryName.isNotEmpty)
-        ? Colors.blueAccent
-        : Colors.grey;
-  }
-
+  // ===== BUILD METHOD =====
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -446,9 +664,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           ),
           actions: [
             // Only show delete button for existing notes
-            if (_noteId != null)
+            if (_note != null && _note!.id != null)
               TextButton(
-                onPressed: _isDeleting ? null : _deleteNote,
+                onPressed: _isDeleting ? null : _delete,
                 child: Text(
                   _isDeleting ? 'Menghapus...' : 'Hapus',
                   style: TextStyle(
@@ -459,7 +677,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               ),
             TextButton(
-              onPressed: _showCategoriesDialog,
+              onPressed: () => _showCategoriesDialog(),
               child: Text(
                 _categoryDisplayText,
                 style: TextStyle(

@@ -125,30 +125,6 @@ class _SearchPageState extends State<SearchPage> {
     });
   }
 
-  String _getPreviewText(String content) {
-    // Remove HTML tags for preview
-    String preview = content.replaceAll(RegExp(r'<[^>]*>'), '');
-
-    // Remove excessive whitespace
-    preview = preview.replaceAll(RegExp(r'[ \t]+'), ' ').trim();
-
-    if (preview.isEmpty) return 'Catatan kosong';
-
-    // Limit to 100 characters while preserving words
-    if (preview.length <= 100) {
-      return preview;
-    }
-
-    int cutOff = 100;
-    int lastSpaceIndex = preview.lastIndexOf(' ', cutOff);
-
-    if (lastSpaceIndex > 50) {
-      return '${preview.substring(0, lastSpaceIndex)}...';
-    } else {
-      return '${preview.substring(0, 100)}...';
-    }
-  }
-
   String _formatDate(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);

@@ -10,12 +10,23 @@ import 'package:notelance/models/category.dart';
 import 'package:notelance/note_editor_page.dart';
 import 'package:notelance/notes_page.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 var logger = Logger();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await dotenv.load(fileName: ".env");
+
   await LocalDatabaseService.instance.initialize();
+
+  await Supabase.initialize(
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+  );
+
   runApp(const NotelanceApp());
 }
 
