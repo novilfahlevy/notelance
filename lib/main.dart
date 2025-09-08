@@ -5,7 +5,7 @@ import 'package:logger/logger.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:notelance/sqflite.dart';
-import 'package:notelance/categories_management_page.dart';
+import 'package:notelance/categories_page.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/note_editor_page.dart';
 import 'package:notelance/notes_page.dart';
@@ -144,11 +144,11 @@ class _NotelanceState extends State<Notelance> {
     Navigator.pushNamed(context, NoteEditorPage.path);
   }
 
-  void _showCategoriesManagementPage(BuildContext context) {
+  void _showCategoriesPage(BuildContext context) {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => CategoriesManagementPage(categories: _categories),
+        pageBuilder: (context, animation, secondaryAnimation) => CategoriesPage(categories: _categories),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(1.0, 0.0);
           const end = Offset.zero;
@@ -195,7 +195,7 @@ class _NotelanceState extends State<Notelance> {
             ),
             IconButton(
               icon: Icon(Icons.label),
-              onPressed: () => _showCategoriesManagementPage(context),
+              onPressed: () => _showCategoriesPage(context),
             ),
             const SizedBox(width: 10)
           ],

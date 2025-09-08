@@ -7,18 +7,18 @@ import 'package:logger/logger.dart';
 
 var logger = Logger();
 
-class CategoriesManagementPage extends StatefulWidget {
-  const CategoriesManagementPage({super.key, required this.categories});
+class CategoriesPage extends StatefulWidget {
+  const CategoriesPage({super.key, required this.categories});
 
   final List<Category> categories;
 
   static final String path = '/categories_management_page';
 
   @override
-  State<CategoriesManagementPage> createState() => _CategoriesManagementPageState();
+  State<CategoriesPage> createState() => _CategoriesPageState();
 }
 
-class _CategoriesManagementPageState extends State<CategoriesManagementPage> {
+class _CategoriesPageState extends State<CategoriesPage> {
   late List<Category> _categories;
   final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
 
