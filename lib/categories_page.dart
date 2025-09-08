@@ -12,7 +12,7 @@ class CategoriesPage extends StatefulWidget {
 
   final List<Category> categories;
 
-  static final String path = '/categories_management_page';
+  static final String path = '/categories_page';
 
   @override
   State<CategoriesPage> createState() => _CategoriesPageState();
