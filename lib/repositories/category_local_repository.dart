@@ -49,7 +49,7 @@ class CategoryLocalRepository {
     }
   }
 
-  Future<Category> createCategory({ required String name, int? order }) async {
+  Future<Category> createCategory({ required String name, int? order, int? remoteId }) async {
     final database = LocalDatabaseService.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
@@ -63,6 +63,7 @@ class CategoryLocalRepository {
         {
           'name': name,
           'order_index': categoryOrder,
+          'remote_id': remoteId,
           'created_at': DateTime.now().millisecondsSinceEpoch,
         },
       );
