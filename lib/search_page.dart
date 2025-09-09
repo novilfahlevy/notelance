@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
-import 'package:notelance/sqflite.dart';
+import 'package:notelance/repositories/note_local_repository.dart'; // Added
 import 'package:notelance/models/note.dart';
 import 'package:notelance/note_editor_page.dart';
 import 'package:flutter_html/flutter_html.dart';
@@ -19,7 +19,7 @@ class SearchPage extends StatefulWidget {
 
 class _SearchPageState extends State<SearchPage> {
   final TextEditingController _keywordController = TextEditingController();
-  final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
+  final NoteLocalRepository _noteRepository = NoteLocalRepository();
 
   List<Note> _notes = [];
   bool _isSearching = false;
@@ -77,7 +77,7 @@ class _SearchPageState extends State<SearchPage> {
     }
 
     try {
-      final searchedNotes = await _databaseService.searchNotes(query);
+      final searchedNotes = await _noteRepository.searchNotes(query);
 
       if (mounted) {
         setState(() {

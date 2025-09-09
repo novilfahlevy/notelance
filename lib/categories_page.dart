@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:notelance/models/category.dart';
-import 'package:notelance/sqflite.dart';
+import 'package:notelance/repositories/category_local_repository.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:logger/logger.dart';
 
@@ -20,7 +20,7 @@ class CategoriesPage extends StatefulWidget {
 
 class _CategoriesPageState extends State<CategoriesPage> {
   late List<Category> _categories;
-  final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
+  final CategoryLocalRepository _categoryRepository = CategoryLocalRepository();
 
   @override
   void initState() {
@@ -31,8 +31,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
   Future<void> _addCategory(String categoryName) async {
     try {
-      // Create new category using the service
-      final newCategory = await _databaseService.createCategory(categoryName);
+      // Create new category using the repository
+      final newCategory = await _categoryRepository.createCategory(name: categoryName);
 
       // Update local list
       setState(() {
@@ -63,7 +63,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
   Future<void> _deleteCategory(Category category) async {
     try {
       // Check if category has notes
-      final notesCount = await _databaseService.getCategoryNotesCount(category.id!);
+      final notesCount = await _categoryRepository.getCategoryNotesCount(category.id!);
 
       if (notesCount > 0) {
         // Show warning dialog if category has notes
@@ -71,8 +71,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
         if (!shouldDelete) return;
       }
 
-      // Delete category using the service
-      await _databaseService.deleteCategory(category.id!);
+      // Delete category using the repository
+      await _categoryRepository.deleteCategory(category.id!);
 
       // Update local list
       setState(() {
@@ -113,8 +113,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
     });
 
     try {
-      // Update order in database
-      await _databaseService.updateCategoriesOrder(_categories);
+      // Update order in database using repository
+      await _categoryRepository.renewCategoriesOrder(_categories);
 
       // Notify other parts of the app to reload categories
       if (mounted) {
@@ -164,7 +164,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
   void _showAddCategoryDialog() {
     final TextEditingController controller = TextEditingController();
-
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -184,26 +183,46 @@ class _CategoriesPageState extends State<CategoriesPage> {
               child: Text('Batal'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 final categoryName = controller.text.trim();
                 if (categoryName.isNotEmpty) {
-                  // Check if category name already exists
-                  final exists = _categories.any((cat) =>
-                  cat.name.toLowerCase() == categoryName.toLowerCase());
+                  try {
+                    // Check if category name already exists using repository
+                    final existingCategory = await _categoryRepository.getCategoryByName(categoryName);
 
-                  if (exists) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Kategori dengan nama "$categoryName" sudah ada'),
-                        backgroundColor: Theme.of(context).colorScheme.surfaceVariant, // Use theme color
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                    return;
+                    if (existingCategory != null && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Kategori dengan nama "$categoryName" sudah ada'),
+                          backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (context.mounted) Navigator.of(context).pop();
+                    _addCategory(categoryName);
+                  } catch (e) {
+                    logger.e('Error checking category name: $e');
+                    // Fall back to local check if database check fails
+                    final exists = _categories.any((cat) =>
+                    cat.name.toLowerCase() == categoryName.toLowerCase());
+
+                    if (exists && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Kategori dengan nama "$categoryName" sudah ada'),
+                          backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (context.mounted) Navigator.of(context).pop();
+                    _addCategory(categoryName);
                   }
-
-                  Navigator.of(context).pop();
-                  _addCategory(categoryName);
                 }
               },
               child: Text('Tambah'),
@@ -216,7 +235,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
   void _showEditCategoryDialog(Category category) {
     final TextEditingController controller = TextEditingController(text: category.name);
-
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -236,27 +254,47 @@ class _CategoriesPageState extends State<CategoriesPage> {
               child: Text('Batal'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 final newCategoryName = controller.text.trim();
                 if (newCategoryName.isNotEmpty && newCategoryName != category.name) {
-                  // Check if category name already exists
-                  final exists = _categories.any((cat) =>
-                  cat.id != category.id &&
-                      cat.name.toLowerCase() == newCategoryName.toLowerCase());
+                  try {
+                    // Check if category name already exists using repository
+                    final existingCategory = await _categoryRepository.getCategoryByName(newCategoryName);
 
-                  if (exists) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Kategori dengan nama "$newCategoryName" sudah ada'),
-                        backgroundColor: Theme.of(context).colorScheme.surfaceVariant, // Use theme color
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                    return;
+                    if (existingCategory != null && existingCategory.id != category.id && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Kategori dengan nama "$newCategoryName" sudah ada'),
+                          backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (context.mounted) Navigator.of(context).pop();
+                    _editCategory(category, newCategoryName);
+                  } catch (e) {
+                    logger.e('Error checking category name: $e');
+                    // Fall back to local check if database check fails
+                    final exists = _categories.any((cat) =>
+                    cat.id != category.id &&
+                        cat.name.toLowerCase() == newCategoryName.toLowerCase());
+
+                    if (exists && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Kategori dengan nama "$newCategoryName" sudah ada'),
+                          backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (context.mounted) Navigator.of(context).pop();
+                    _editCategory(category, newCategoryName);
                   }
-
-                  Navigator.of(context).pop();
-                  _editCategory(category, newCategoryName);
                 }
               },
               child: Text('Simpan'),
@@ -269,8 +307,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
   Future<void> _editCategory(Category category, String newName) async {
     try {
-      // Update using the service
-      await _databaseService.updateCategory(category.id!, newName);
+      // Update using the repository
+      await _categoryRepository.updateCategory(category.id!, name: newName);
 
       // Update local list
       setState(() {
@@ -338,10 +376,10 @@ class _CategoriesPageState extends State<CategoriesPage> {
         children: [
           Expanded(
             child: ReorderableListView.builder(
-              buildDefaultDragHandles: false,
-              padding: EdgeInsets.only(bottom: 100),
-              onReorder: _reorderCategories,
-              itemCount: _categories.length,
+                buildDefaultDragHandles: false,
+                padding: EdgeInsets.only(bottom: 100),
+                onReorder: _reorderCategories,
+                itemCount: _categories.length,
                 itemBuilder: (context, index) {
                   final category = _categories[index];
                   return Card(

@@ -13,7 +13,8 @@ import 'package:notelance/delete_note_dialog.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
-import 'package:notelance/sqflite.dart';
+import 'package:notelance/repositories/category_local_repository.dart';
+import 'package:notelance/repositories/note_local_repository.dart'; // Added
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -33,7 +34,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   // Core properties
   Note? _note;
   bool _isInitialized = false;
-  final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
+  final NoteLocalRepository _noteRepository = NoteLocalRepository(); // Changed
+  final CategoryLocalRepository _categoryRepository = CategoryLocalRepository();
 
   // Controllers
   final TextEditingController _titleController = TextEditingController();
@@ -136,10 +138,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   Future<void> _loadCategories() async {
-    if (!_databaseService.isInitialized) return;
-
     try {
-      final categories = await _databaseService.getCategories();
+      final categories = await _categoryRepository.getCategories();
 
       if (!mounted) return;
 
@@ -150,10 +150,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   Future<void> _loadNote() async {
-    if (!_databaseService.isInitialized || _note == null || _note!.id == null) return;
+    // Changed: Removed _databaseService.isInitialized check
+    if (_note == null || _note!.id == null) return;
 
     try {
-      final note = await _databaseService.getNoteById(_note!.id!);
+      // Changed: Used _noteRepository
+      final note = await _noteRepository.getNoteById(_note!.id!);
 
       if (note == null) {
         _showErrorSnackBar('Catatan tidak ditemukan');
@@ -236,28 +238,29 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     if (name == null || name.trim().isEmpty) {
       return 'Nama kategori tidak boleh kosong.';
     }
-    final existingCategory = await _databaseService.getCategoryByName(name.trim());
-    if (existingCategory != null) {
-      return 'Kategori "${name.trim()}" sudah ada.';
+
+    try {
+      final existingCategory = await _categoryRepository.getCategoryByName(name.trim());
+      if (existingCategory != null) {
+        return 'Kategori "${name.trim()}" sudah ada.';
+      }
+    } catch (e) {
+      logger.e('Error validating category name: $e');
+      // Fall back to local validation if database check fails
+      final exists = _categories.any((cat) =>
+      cat.name.toLowerCase() == name.trim().toLowerCase());
+      if (exists) {
+        return 'Kategori "${name.trim()}" sudah ada.';
+      }
     }
+
     return null;
   }
 
   Future<Category> _createNewCategory(String categoryName) async {
-    // Safeguard: Check for existing category before creation
-    final existingCategory = await _databaseService.getCategoryByName(categoryName.trim());
-    if (existingCategory != null) {
-      logger.e('Attempted to create a category that already exists: "${categoryName.trim()}"');
-      throw Exception('Kategori "${categoryName.trim()}" sudah ada.');
-    }
-
     try {
-      if (_databaseService.database == null) {
-        throw Exception('Database is not initialized.');
-      }
-
-      // Create category in the local database first
-      final newCategory = await _databaseService.createCategory(categoryName.trim());
+      // Create category using the repository
+      final newCategory = await _categoryRepository.createCategory(name: categoryName.trim());
 
       // Reload categories in the categories selector
       await _loadCategories();
@@ -367,7 +370,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     setState(() => _isDeleting = true);
 
     try {
-      await _databaseService.deleteNote(_note!.id!);
+      // Changed: Used _noteRepository
+      await _noteRepository.deleteNote(_note!.id!);
       await _deleteNoteInRemoteDatabase();
 
       logger.d('Note deleted successfully with ID: ${_note!.id}');
@@ -396,7 +400,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
 
     try {
-      final savedNoteId = await _databaseService.createNote(_note!);
+      // Changed: Used _noteRepository
+      final savedNoteId = await _noteRepository.createNote(_note!);
       setState(() {
         _note = _note!.copyWith(id: savedNoteId);
       });
@@ -413,7 +418,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
 
     try {
-      await _databaseService.updateNote(_note!);
+      // Changed: Used _noteRepository
+      await _noteRepository.updateNote(_note!);
       logger.d('Note updated with ID: ${_note!.id}');
     } catch (e) {
       logger.e('Error updating note in local database: $e');
@@ -427,7 +433,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         return _note!.createdAt!;
       }
 
-      final existingNote = await _databaseService.getNoteById(_note!.id!);
+      // Changed: Used _noteRepository
+      final existingNote = await _noteRepository.getNoteById(_note!.id!);
 
       if (existingNote != null) {
         return existingNote.createdAt!;
@@ -442,7 +449,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   Future<void> _updateCategoryRemoteIdInLocalDatabase(Category category) async {
     try {
-      await _databaseService.updateCategory(category.id!, category.name, remoteId: category.remoteId);
+      await _categoryRepository.updateCategory(
+          category.id!,
+          name: category.name,
+          remoteId: category.remoteId
+      );
       logger.d('Category updated locally with ID: ${category.id}');
     } catch (e) {
       logger.e('Error in _updateCategoryRemoteIdInLocalDatabase method: $e');

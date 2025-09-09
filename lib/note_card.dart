@@ -17,9 +17,9 @@ class NoteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final Color? primaryColor = theme.colorScheme.primary;
-    final Color? onSurfaceColor = theme.colorScheme.onSurface;
-    final Color? onSurfaceColorMuted = theme.colorScheme.onSurface.withOpacity(0.7);
+    final Color primaryColor = theme.colorScheme.primary;
+    final Color onSurfaceColor = theme.colorScheme.onSurface;
+    final Color onSurfaceColorMuted = theme.colorScheme.onSurface.withOpacity(0.7);
 
     return Card(
       elevation: 0,

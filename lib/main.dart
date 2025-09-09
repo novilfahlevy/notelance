@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:notelance/repositories/category_local_repository.dart';
 import 'package:notelance/search_page.dart';
 import 'package:provider/provider.dart';
 import 'package:logger/logger.dart';
@@ -130,10 +131,9 @@ class _NotelanceState extends State<Notelance> {
 
     if (categoriesNotifier.shouldReloadCategories) {
       try {
-        final categories = await _databaseService.getCategories();
-        setState(() {
-          _categories = categories;
-        });
+        final categoryLocalRepository = CategoryLocalRepository();
+        final categories = await categoryLocalRepository.getCategories();
+        setState(() => _categories = categories);
       } catch (e) {
         logger.e(e.toString());
       }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/note_card.dart';
-import 'package:notelance/sqflite.dart';
+import 'package:notelance/repositories/note_local_repository.dart'; // Added
 import 'package:notelance/note_editor_page.dart';
 import 'package:logger/logger.dart';
 
@@ -21,7 +21,7 @@ class _NotesPageState extends State<NotesPage>
     with AutomaticKeepAliveClientMixin {
   List<Note> _notes = [];
   bool _isLoading = true;
-  final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
+  final NoteLocalRepository _noteRepository = NoteLocalRepository(); // Changed
 
   @override
   bool get wantKeepAlive => true;
@@ -35,7 +35,7 @@ class _NotesPageState extends State<NotesPage>
   Future<void> _loadNotes() async {
     if (!mounted) return;
 
-    if (!_databaseService.isInitialized) return;
+    // Changed: Removed _databaseService.isInitialized check
 
     setState(() => _isLoading = true);
 
@@ -43,9 +43,11 @@ class _NotesPageState extends State<NotesPage>
       late List<Note> notes;
 
       if (widget.category != null) {
-        notes = await _databaseService.getNotesByCategory(widget.category!.id!);
+        // Changed: Used _noteRepository
+        notes = await _noteRepository.getNotesByCategory(widget.category!.id!);
       } else {
-        notes = await _databaseService.getUncategorizedNotes();
+        // Changed: Used _noteRepository
+        notes = await _noteRepository.getUncategorizedNotes();
       }
 
       setState(() {
