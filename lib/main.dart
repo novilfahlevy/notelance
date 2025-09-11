@@ -1,4 +1,11 @@
+import 'dart:io';
+import 'dart:isolate';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:notelance/synchronization.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
 import 'package:notelance/search_page.dart';
 import 'package:provider/provider.dart';
@@ -118,7 +125,61 @@ class _NotelanceState extends State<Notelance> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     context.watch<CategoriesNotifier>();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCategories());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadCategories();
+      _spawnSynchronizationIsolate();
+    });
+  }
+
+  Future<void> _spawnSynchronizationIsolate() async {
+    if (await _hasInternetConnection()) {
+      final receivePort = ReceivePort();
+
+      try {
+        final databasePath = await LocalDatabaseService.instance.getDatabasePath();
+        await Isolate.spawn<SynchronizationIsolateMessage>(
+            isolateEntry,
+            SynchronizationIsolateMessage(
+                supabaseFunctionUrl: dotenv.env['SUPABASE_FUNCTION_URL']!,
+                supabaseServiceRoleKey: dotenv.env['SUPABASE_SERVICE_ROLE_KEY']!,
+                sendPort: receivePort.sendPort,
+                rootIsolateToken: RootIsolateToken.instance!,
+                databasePath: databasePath
+            )
+        );
+
+        // Listen for the result
+        receivePort.listen((message) {
+          if (message is Map<String, dynamic>) {
+            if (message['status'] == 'success') {
+              logger.i('Synchronization completed successfully');
+              _loadCategories();
+            } else if (message['status'] == 'error') {
+              logger.e('Synchronization failed: ${message['error']}');
+            }
+          }
+
+          receivePort.close();
+        });
+      } catch (error) {
+        logger.e('Error spawning isolate: $error');
+        receivePort.close();
+      }
+    }
+  }
+
+  Future<bool> _hasInternetConnection() async {
+    if (Platform.environment.containsKey('VERCEL') || kIsWeb) return true;
+
+    if (Platform.isAndroid || Platform.isIOS || Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+      try {
+        final result = await Connectivity().checkConnectivity();
+        return result.first != ConnectivityResult.none;
+      } catch (e) {
+        logger.e('Error checking connectivity: $e');
+      }
+    }
+    return false;
   }
 
   final TextEditingController _searchController = TextEditingController();
@@ -213,7 +274,7 @@ class _NotelanceState extends State<Notelance> {
             NotesPage(key: const ValueKey('notes_page_general')),
 
             ..._categories.map((category) => NotesPage(
-                key: ValueKey('notes_page_${category.id}_${category.order}'),
+                key: ValueKey('notes_page_${category.id}_${category.orderIndex}'),
                 category: category
             )),
           ],

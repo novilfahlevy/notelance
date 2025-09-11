@@ -67,7 +67,7 @@ void main() {
         status: 201,
         data: {
           'message': 'CATEGORY_CREATED_SUCCESSFULLY',
-          'category': {'name': 'Test Category', 'order': 1},
+          'category': {'name': 'Test Category', 'order_index': 1},
         },
       );
       when(mockFunctionsClient.invoke(

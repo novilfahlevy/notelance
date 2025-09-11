@@ -23,7 +23,7 @@ class LocalDatabaseService {
   Database? get database => _database;
 
   /// Initialize the database
-  Future<void> initialize() async {
+  Future<void> initialize({ String? successMessage }) async {
     if (_database != null) return;
 
     try {
@@ -36,8 +36,7 @@ class LocalDatabaseService {
       // this step, it will use the sqlite version available on the system.
       databaseFactory = databaseFactoryFfi;
 
-      Directory documentsDirectory = await getApplicationDocumentsDirectory();
-      String path = join(documentsDirectory.path, 'main.db');
+      String path = await getDatabasePath();
 
       _database = await openDatabase(
         path,
@@ -56,7 +55,7 @@ class LocalDatabaseService {
         },
       );
 
-      _logger.d('Database initialized successfully');
+      _logger.d(successMessage ?? 'Database initialized successfully');
     } catch (e) {
       _logger.e('Error initializing database: ${e.toString()}');
       rethrow;
@@ -66,7 +65,7 @@ class LocalDatabaseService {
   /// Create database tables (updated version)
   Future<void> _createTables(Database db) async {
     try {
-      // Create Categories table with order column
+      // Create Categories table with order_index column
       await db.execute('''
       CREATE TABLE IF NOT EXISTS Categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,8 +139,8 @@ class LocalDatabaseService {
 
   /// Get database path (for debugging purposes)
   Future<String> getDatabasePath() async {
-    var databasesPath = await getDatabasesPath();
-    return join(databasesPath, 'main.db');
+    Directory documentsDirectory = await getApplicationDocumentsDirectory();
+    return join(documentsDirectory.path, 'main.db');
   }
 
   /// Execute raw SQL query (use with caution)

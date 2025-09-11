@@ -30,7 +30,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
   @override
   void initState() {
     super.initState();
-    _categories = List.from(widget.categories)..sort((a, b) => a.order.compareTo(b.order));
+    _categories = List.from(widget.categories)..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
   }
 
   /// ----------------------
@@ -61,7 +61,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
       final remoteId = await _storeCategoryRemote(category);
       if (remoteId != null) category.remoteId = remoteId;
 
-      setState(() => _categories..add(category)..sort((a, b) => a.order.compareTo(b.order)));
+      setState(() => _categories..add(category)..sort((a, b) => a.orderIndex.compareTo(b.orderIndex)));
       context.read<CategoriesNotifier>().reloadCategories();
 
       _showSnackBar('Berhasil menambah kategori.', Colors.green);
@@ -120,7 +120,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
       _categories.insert(newIndex, item);
 
       for (int i = 0; i < _categories.length; i++) {
-        _categories[i] = _categories[i].copyWith(order: i);
+        _categories[i] = _categories[i].copyWith(orderIndex: i);
       }
     });
 

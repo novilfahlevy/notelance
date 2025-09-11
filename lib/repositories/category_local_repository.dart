@@ -20,7 +20,8 @@ class CategoryLocalRepository {
           .map((categoryJson) => Category.fromJson({
         'id': categoryJson['id'],
         'name': categoryJson['name'],
-        'order': categoryJson['order_index'] ?? 0,
+        'order_index': categoryJson['order_index'] ?? 0,
+        'remote_id': categoryJson['remote_id']
       }))
           .toList();
     } catch (e) {
@@ -49,14 +50,54 @@ class CategoryLocalRepository {
     }
   }
 
-  Future<Category> createCategory({ required String name, int? order, int? remoteId }) async {
+  Future<Category?> getCategoryById(int id) async {
     final database = LocalDatabaseService.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
-      // If no order specified, get the next available order
+      final List<Map<String, dynamic>> categoriesFromDb = await database.query(
+          'Categories',
+          where: 'id = ?',
+          whereArgs: [id]
+      );
+
+      if (categoriesFromDb.isEmpty) return null;
+
+      return Category.fromJson(categoriesFromDb.first);
+    } catch (e) {
+      logger.e('Error in CategoryRepository.getCategoryByName method: $e');
+      rethrow;
+    }
+  }
+
+  Future<Category?> getCategoryByRemoteId(int remoteId) async {
+    final database = LocalDatabaseService.instance.database;
+    if (database == null) throw Exception('Database not initialized');
+
+    try {
+      final List<Map<String, dynamic>> categoriesFromDb = await database.query(
+          'Categories',
+          where: 'remote_id = ?',
+          whereArgs: [remoteId]
+      );
+
+      if (categoriesFromDb.isEmpty) return null;
+
+      return Category.fromJson(categoriesFromDb.first);
+    } catch (e) {
+      logger.e('Error in CategoryRepository.getCategoryByName method: $e');
+      rethrow;
+    }
+  }
+
+  Future<Category> createCategory({ required String name, int? orderIndex, int? remoteId }) async {
+    final database = LocalDatabaseService.instance.database;
+    if (database == null) throw Exception('Database not initialized');
+
+    try {
+      // If no order_index specified, get the next available order_index
       // Use the transaction 'txn' if provided, otherwise use the main database instance for _getNextCategoryOrder
-      int categoryOrder = order ?? await _getNextCategoryOrder();
+      int categoryOrder = orderIndex ?? await _getNextCategoryOrder();
 
       final categoryId = await database.insert(
         'Categories',
@@ -68,9 +109,9 @@ class CategoryLocalRepository {
         },
       );
 
-      logger.d('Category created with ID: $categoryId, order: $categoryOrder');
+      logger.d('Category created with ID: $categoryId, orderIndex: $categoryOrder');
 
-      return Category(id: categoryId, name: name, order: categoryOrder);
+      return Category(id: categoryId, name: name, orderIndex: categoryOrder);
     } catch (e) {
       logger.e('Error in CategoryRepository.createCategory method: $e');
       rethrow;
@@ -92,7 +133,7 @@ class CategoryLocalRepository {
     }
   }
 
-  Future<void> updateCategory(int categoryId, { String? name, int? order, int? remoteId }) async {
+  Future<void> updateCategory(int categoryId, { String? name, int? orderIndex, int? remoteId }) async {
     final database = LocalDatabaseService.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
@@ -103,8 +144,8 @@ class CategoryLocalRepository {
         updateData['name'] = name;
       }
 
-      if (order != null) {
-        updateData['order_index'] = order;
+      if (orderIndex != null) {
+        updateData['order_index'] = orderIndex;
       }
 
       if (remoteId != null) {
@@ -150,7 +191,7 @@ class CategoryLocalRepository {
 
       await batch.commit(noResult: true);
 
-      logger.d('Categories order updated');
+      logger.d('Categories order_index updated');
     } catch (e) {
       logger.e('Error in CategoryRepository.renewCategoriesOrder method: $e');
       rethrow;

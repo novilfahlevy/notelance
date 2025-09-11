@@ -1,13 +1,13 @@
 class Category {
   final int? id;
   final String name;
-  final int order;
+  final int orderIndex;
   int? remoteId; // Changed to int?
 
   Category({
     this.id,
     required this.name,
-    this.order = 0,
+    this.orderIndex = 0,
     this.remoteId, // Changed to int?
   });
 
@@ -17,18 +17,18 @@ class Category {
     return other is Category &&
         other.id == id &&
         other.name == name &&
-        other.order == order &&
+        other.orderIndex == orderIndex &&
         other.remoteId == remoteId; // remoteId check
   }
 
   @override
-  int get hashCode => Object.hash(id, name, order, remoteId); // Added remoteId to hash
+  int get hashCode => Object.hash(id, name, orderIndex, remoteId); // Added remoteId to hash
 
   factory Category.fromJson(Map<String, dynamic> json) {
     return Category(
       id: json['id'] as int?,
       name: json['name'] as String,
-      order: json['order'] as int? ?? 0,
+      orderIndex: json['order_index'] as int? ?? 0,
       remoteId: json['remote_id'] as int?, // Changed to int?
     );
   }
@@ -37,7 +37,7 @@ class Category {
     return {
       'id': id,
       'name': name,
-      'order': order,
+      'order_index': orderIndex,
       'remote_id': remoteId, // remoteId
     };
   }
@@ -45,19 +45,19 @@ class Category {
   Category copyWith({
     int? id,
     String? name,
-    int? order,
+    int? orderIndex,
     int? remoteId, // Changed to int?
   }) {
     return Category(
       id: id ?? this.id,
       name: name ?? this.name,
-      order: order ?? this.order,
+      orderIndex: orderIndex ?? this.orderIndex,
       remoteId: remoteId ?? this.remoteId, // remoteId
     );
   }
 
   @override
   String toString() {
-    return 'Category{id: $id, name: $name, order: $order, remoteId: $remoteId}'; // Added remoteId
+    return 'Category{id: $id, name: $name, orderIndex: $orderIndex, remoteId: $remoteId}'; // Added remoteId
   }
 }

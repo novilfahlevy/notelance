@@ -46,6 +46,25 @@ class NoteLocalRepository {
     }
   }
 
+  Future<List<Note>> getNotesWithRemoteId() async {
+    final database = LocalDatabaseService.instance.database;
+    if (database == null) throw Exception('Database not initialized');
+
+    try {
+      final List<Map<String, dynamic>> notesFromDb = await database.query(
+        'Notes',
+        where: 'remote_id IS NOT NULL'
+      );
+
+      return notesFromDb
+          .map((noteJson) => Note.fromJson(noteJson))
+          .toList();
+    } catch (e) {
+      logger.e('Error in NoteLocalRepository.getNotesByCategory method: $e');
+      rethrow;
+    }
+  }
+
   Future<Note?> getNoteById(int noteId) async {
     final database = LocalDatabaseService.instance.database;
     if (database == null) throw Exception('Database not initialized');
