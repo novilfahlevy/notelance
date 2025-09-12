@@ -121,6 +121,22 @@ class Notelance extends StatefulWidget {
 class _NotelanceState extends State<Notelance> {
   final LocalDatabaseService _databaseService = LocalDatabaseService.instance;
 
+  /// To show the loading indicator when syncing.
+  bool _isSyncing = false;
+
+  /// The status of the sync operation
+  bool? _isSyncSuccess;
+
+  /// This key is used to uniquely identify NotesPage widgets.
+  /// So if this key is changed, those notes pages would be re-rendered.
+  late String _randomKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _randomKey = DateTime.now().toUtc().microsecondsSinceEpoch.toString();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -133,6 +149,10 @@ class _NotelanceState extends State<Notelance> {
 
   Future<void> _spawnSynchronizationIsolate() async {
     if (await _hasInternetConnection()) {
+      setState(() {
+        _isSyncing = true;
+        _isSyncSuccess = null; // Reset sync status
+      });
       final receivePort = ReceivePort();
 
       try {
@@ -154,17 +174,35 @@ class _NotelanceState extends State<Notelance> {
             if (message['status'] == 'success') {
               logger.i('Synchronization completed successfully');
               _loadCategories();
+              setState(() {
+                _randomKey = DateTime.now().toUtc().microsecondsSinceEpoch.toString();
+                _isSyncing = false;
+                _isSyncSuccess = true;
+              });
             } else if (message['status'] == 'error') {
               logger.e('Synchronization failed: ${message['error']}');
+              setState(() {
+                _isSyncing = false;
+                _isSyncSuccess = false;
+              });
             }
           }
-
           receivePort.close();
         });
       } catch (error) {
         logger.e('Error spawning isolate: $error');
+        setState(() {
+          _isSyncing = false;
+          _isSyncSuccess = false;
+        });
         receivePort.close();
       }
+    } else {
+      // No internet connection
+      setState(() {
+        _isSyncing = false;
+        _isSyncSuccess = false;
+      });
     }
   }
 
@@ -227,6 +265,39 @@ class _NotelanceState extends State<Notelance> {
     Navigator.pushNamed(context, SearchPage.path);
   }
 
+  Widget _buildSyncStatusWidget() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _isSyncing
+              ? SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                )
+              : Icon(
+                _isSyncSuccess! ? Icons.check_circle : Icons.error,
+                color: _isSyncSuccess! ? Colors.green : Colors.red,
+                size: 24,
+              ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.sync, size: 24),
+            onPressed: _spawnSynchronizationIsolate,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: 24,
+              minHeight: 24,
+            ),
+            tooltip: 'Re-sync',
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -250,12 +321,13 @@ class _NotelanceState extends State<Notelance> {
         appBar: AppBar(
           title: const Text('Notelance'),
           actions: [
+            _buildSyncStatusWidget(),
             IconButton(
-              icon: Icon(Icons.search),
+              icon: Icon(Icons.search, size: 24,),
               onPressed: () => _showSearchPage(context),
             ),
             IconButton(
-              icon: Icon(Icons.label),
+              icon: Icon(Icons.label, size: 24),
               onPressed: () => _showCategoriesPage(context),
             ),
             const SizedBox(width: 10)
@@ -271,10 +343,9 @@ class _NotelanceState extends State<Notelance> {
         ),
         body: TabBarView(
           children: [
-            NotesPage(key: const ValueKey('notes_page_general')),
-
+            NotesPage(key: ValueKey('notes_page_general_$_randomKey')),
             ..._categories.map((category) => NotesPage(
-                key: ValueKey('notes_page_${category.id}_${category.orderIndex}'),
+                key: ValueKey('notes_page_${category.id}_${category.orderIndex}_$_randomKey'),
                 category: category
             )),
           ],
