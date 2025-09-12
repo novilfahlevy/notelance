@@ -146,8 +146,7 @@ class Synchronization {
         final createdAtUTC = _ensureUTCFormat(notes[i].createdAt!);
         final updatedAtUTC = _ensureUTCFormat(notes[i].updatedAt!);
 
-        final params = 'note_id=${notes[i]
-            .remoteId}&created_at=$createdAtUTC&updated_at=$updatedAtUTC';
+        final params = 'note_id=${notes[i].remoteId}&created_at=$createdAtUTC&updated_at=$updatedAtUTC';
 
         final Response response = await _httpClient.get(
             '$supabaseFunctionUrl/sync-fetch?$params',
@@ -211,16 +210,28 @@ class Synchronization {
               final String createdAtLocal = createdAtUtc.toLocal().toIso8601String();
               final String updatedAtLocal = updatedAtUtc.toLocal().toIso8601String();
 
-              await _noteLocalRepository.createNote(
-                Note(
-                  title: remoteNoteData['title'],
-                  content: remoteNoteData['content'],
-                  remoteId: currentRemoteNoteId,
-                  // categoryId: remoteNoteData['remote_category_id'],
-                  createdAt: createdAtLocal,
-                  updatedAt: updatedAtLocal,
-                ),
+              final Note newNote = Note(
+                title: remoteNoteData['title'],
+                content: remoteNoteData['content'],
+                remoteId: currentRemoteNoteId,
+                createdAt: createdAtLocal,
+                updatedAt: updatedAtLocal,
               );
+
+              /// Attach the category to the note
+              final int? remoteCategoryId = remoteNoteData['remote_category_id'];
+              if (remoteCategoryId != null) {
+                Category? localCategory = await _categoryLocalRepository.getCategoryByRemoteId(remoteCategoryId);
+                localCategory ??= await _categoryLocalRepository.createCategory(
+                    name: remoteNoteData['remote_category_name'],
+                    remoteId: remoteNoteData['remote_category_id'],
+                    orderIndex: remoteNoteData['remote_category_order_index']
+                );
+                newNote.categoryId = localCategory.id!;
+              }
+
+              /// Insert the remote note to the local database
+              await _noteLocalRepository.createNote(newNote);
             }
           }
         } else {
@@ -356,27 +367,31 @@ class Synchronization {
     }
   }
 
-  static Future<void> _handleNewerServerNote(Note localNote,
-      Map<String, dynamic> serverData) async {
+  static Future<void> _handleNewerServerNote(Note localNote, Map<String, dynamic> serverData) async {
     try {
-      /// Handle the category sync
-      final Category? localCategoryBySameRemoteId = serverData['remote_category_id'] !=
-          null
-          ? await _categoryLocalRepository.getCategoryByRemoteId(
-          serverData['remote_category_id'])
-          : null;
-
-      /// Update the note in local database
-      await _noteLocalRepository.updateNote(Note(
+      final Note remoteUpdatedNote = Note(
         id: localNote.id,
         title: serverData['title'],
         content: serverData['content'],
         remoteId: serverData['remote_id'],
-        categoryId: localCategoryBySameRemoteId?.id ?? localNote.categoryId,
-        createdAt: localNote.createdAt,
-        // Keep original creation time
-        updatedAt: serverData['updated_at'], // Use server's updated time
-      ));
+        createdAt: localNote.createdAt, /// Keep original creation time
+        updatedAt: serverData['updated_at'], /// Use server's updated time
+      );
+
+      /// Attach the category to the note
+      final int? remoteCategoryId = serverData['remote_category_id'];
+      if (remoteCategoryId != null) {
+        Category? localCategory = await _categoryLocalRepository.getCategoryByRemoteId(remoteCategoryId);
+        localCategory ??= await _categoryLocalRepository.createCategory(
+            name: serverData['remote_category_name'],
+            remoteId: serverData['remote_category_id'],
+            orderIndex: serverData['remote_category_order_index']
+        );
+        remoteUpdatedNote.categoryId = localCategory.id!;
+      }
+
+      /// Update the note in local database
+      await _noteLocalRepository.updateNote(remoteUpdatedNote);
     } catch (error) {
       logger.e('Error handling newer server note: $error');
       rethrow;

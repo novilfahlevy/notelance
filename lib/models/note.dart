@@ -2,7 +2,7 @@ class Note {
   int? id;
   final String title;
   final String? content;
-  final int? categoryId;
+  int? categoryId;
   String? createdAt;
   String? updatedAt;
   int? remoteId; // Changed to int?
