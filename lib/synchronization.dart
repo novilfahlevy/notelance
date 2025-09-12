@@ -134,7 +134,8 @@ class Synchronization {
 
   static Future<void> synchronizeNotes() async {
     try {
-      await _synchronizeNewNotes();
+      await _synchronizeNewLocalNotesToRemote();
+      await _synchronizeNewRemoteNotesToLocal(); // Added call to the modified function
 
       /// Synchronize notes with remote id
       final List<Note> notes = await _noteLocalRepository.getNotesWithRemoteId();
@@ -175,7 +176,66 @@ class Synchronization {
     }
   }
 
-  static Future<void> _synchronizeNewNotes() async {
+  static Future<void> _synchronizeNewRemoteNotesToLocal() async {
+    try {
+      try {
+        final Response response = await _httpClient.get(
+          '$supabaseFunctionUrl/sync-fetch-all',
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $supabaseServiceRoleKey',
+              'Content-Type': 'application/json',
+            },
+          ),
+        );
+
+        if (response.statusCode == 200) {
+          final List<dynamic> allRemoteNotesData = response.data['notes'] as List<dynamic>;
+
+          for (final remoteNoteRaw in allRemoteNotesData) {
+            final remoteNoteData = remoteNoteRaw as Map<String, dynamic>;
+            /// Assuming remote_id from server is int. Adjust if necessary.
+            final int currentRemoteNoteId = remoteNoteData['remote_id'] as int;
+
+            /// Original condition: if a local note with this remote_id does not exist.
+            if (await _noteLocalRepository.checkNoteIsNotExistedByRemoteId(currentRemoteNoteId)) {
+              /// Get created_at and updated_at from the current remote note
+              final String createdAtStringFromServer = remoteNoteData['created_at'] as String;
+              final String updatedAtStringFromServer = remoteNoteData['updated_at'] as String;
+
+              /// Parse from String to DateTime (UTC)
+              final DateTime createdAtUtc = DateTime.parse(createdAtStringFromServer);
+              final DateTime updatedAtUtc = DateTime.parse(updatedAtStringFromServer);
+
+              /// Convert to local timezone and then to ISO8601 string
+              final String createdAtLocal = createdAtUtc.toLocal().toIso8601String();
+              final String updatedAtLocal = updatedAtUtc.toLocal().toIso8601String();
+
+              await _noteLocalRepository.createNote(
+                Note(
+                  title: remoteNoteData['title'],
+                  content: remoteNoteData['content'],
+                  remoteId: currentRemoteNoteId,
+                  // categoryId: remoteNoteData['remote_category_id'],
+                  createdAt: createdAtLocal,
+                  updatedAt: updatedAtLocal,
+                ),
+              );
+            }
+          }
+        } else {
+          logger.e("Failed to fetch remote notes. Status: ${response.statusCode}, Data: ${response.data}");
+        }
+      } catch (error) {
+        logger.e("Failed to fetch remote notes. Error: $error");
+      }
+    } catch (error) {
+      logger.e('Error in _synchronizeNewRemoteNotesToLocal: $error');
+      rethrow;
+    }
+  }
+
+  static Future<void> _synchronizeNewLocalNotesToRemote() async {
     try {
       final List<Note> newNotes = await _noteLocalRepository.getNotesWithoutRemoteId();
       logger.i('Found ${newNotes.length} new notes to synchronize.');
@@ -239,7 +299,7 @@ class Synchronization {
         }
       }
     } catch (error) {
-      logger.e('Error in _synchronizeNewNotes: $error');
+      logger.e('Error in _synchronizeNewLocalNotesToRemote: $error');
       rethrow; /// Rethrow to allow the caller to handle it if necessary
     }
   }

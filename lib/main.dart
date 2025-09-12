@@ -278,8 +278,8 @@ class _NotelanceState extends State<Notelance> {
                   child: CircularProgressIndicator(strokeWidth: 3),
                 )
               : Icon(
-                _isSyncSuccess! ? Icons.check_circle : Icons.error,
-                color: _isSyncSuccess! ? Colors.green : Colors.red,
+                _isSyncSuccess == true ? Icons.check_circle : Icons.error,
+                color: _isSyncSuccess == true ? Colors.green : Colors.red,
                 size: 24,
               ),
           const SizedBox(width: 4),

@@ -65,6 +65,30 @@ class NoteLocalRepository {
     }
   }
 
+  Future<bool> checkNoteIsNotExistedByRemoteId(int remoteId) async {
+    final database = LocalDatabaseService.instance.database;
+    if (database == null) throw Exception('Database not initialized');
+
+    try {
+      final List<Map<String, dynamic>> result = await database.query(
+        'Notes',
+        columns: ['COUNT(*) as count'],
+        where: 'remote_id = ?',
+        whereArgs: [remoteId],
+      );
+
+      if (result.isNotEmpty) {
+        final count = result.first['count'] as int?;
+        return count != null && count <= 0;
+      }
+
+      return true;
+    } catch (e) {
+      logger.e('Error in NoteLocalRepository.checkNoteExistsByRemoteId method: $e');
+      rethrow;
+    }
+  }
+
   Future<List<Note>> getNotesWithoutRemoteId() async {
     final database = LocalDatabaseService.instance.database;
     if (database == null) throw Exception('Database not initialized');
