@@ -473,10 +473,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
 
     try {
+      final notePayload = _note!.toJson();
+
+      if (_note?.categoryId != null) {
+        final Category? category = await _categoryRepository.getCategoryById(_note!.categoryId!);
+        if (category != null && category.remoteId != null) {
+          notePayload['remote_category_id'] = category.remoteId;
+        }
+      }
+
       final FunctionResponse response = await Supabase.instance.client.functions.invoke(
         'hello-world/sync-send',
         method: HttpMethod.post,
-        body: _note!.toJson(),
+        body: notePayload,
       );
 
       if (response.data['message'] == 'NOTE_IS_SUCCESSFULLY_SYNCED') {
