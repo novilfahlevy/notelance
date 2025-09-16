@@ -12,13 +12,11 @@ class NoteLocalRepository {
     try {
       final List<Map<String, dynamic>> notesFromDb = await database.query(
         'Notes',
-        where: 'category_id IS NULL',
+        where: 'category_id IS NULL AND is_deleted = 0',
         orderBy: 'updated_at DESC',
       );
 
-      return notesFromDb
-          .map((noteJson) => Note.fromJson(noteJson))
-          .toList();
+      return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
     } catch (e) {
       logger.e('Error in NoteLocalRepository.getUncategorizedNotes method: $e');
       rethrow;
@@ -32,14 +30,12 @@ class NoteLocalRepository {
     try {
       final List<Map<String, dynamic>> notesFromDb = await database.query(
         'Notes',
-        where: 'category_id = ?',
+        where: 'category_id = ? AND is_deleted = 0',
         whereArgs: [categoryId],
         orderBy: 'updated_at DESC',
       );
 
-      return notesFromDb
-          .map((noteJson) => Note.fromJson(noteJson))
-          .toList();
+      return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
     } catch (e) {
       logger.e('Error in NoteLocalRepository.getNotesByCategory method: $e');
       rethrow;
@@ -53,14 +49,12 @@ class NoteLocalRepository {
     try {
       final List<Map<String, dynamic>> notesFromDb = await database.query(
         'Notes',
-        where: 'remote_id IS NOT NULL'
+        where: 'remote_id IS NOT NULL AND is_deleted = 0',
       );
 
-      return notesFromDb
-          .map((noteJson) => Note.fromJson(noteJson))
-          .toList();
+      return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
     } catch (e) {
-      logger.e('Error in NoteLocalRepository.getNotesByCategory method: $e');
+      logger.e('Error in NoteLocalRepository.getNotesWithRemoteId method: $e');
       rethrow;
     }
   }
@@ -84,7 +78,8 @@ class NoteLocalRepository {
 
       return true;
     } catch (e) {
-      logger.e('Error in NoteLocalRepository.checkNoteExistsByRemoteId method: $e');
+      logger.e(
+          'Error in NoteLocalRepository.checkNoteIsNotExistedByRemoteId method: $e');
       rethrow;
     }
   }
@@ -95,13 +90,11 @@ class NoteLocalRepository {
 
     try {
       final List<Map<String, dynamic>> notesFromDb = await database.query(
-          'Notes',
-          where: 'remote_id IS NULL'
+        'Notes',
+        where: 'remote_id IS NULL AND is_deleted = 0',
       );
 
-      return notesFromDb
-          .map((noteJson) => Note.fromJson(noteJson))
-          .toList();
+      return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
     } catch (e) {
       logger.e('Error in NoteLocalRepository.getNotesWithoutRemoteId method: $e');
       rethrow;
@@ -175,6 +168,29 @@ class NoteLocalRepository {
     if (database == null) throw Exception('Database not initialized');
 
     try {
+      final updatedRows = await database.update(
+        'Notes',
+        {'is_deleted': 1},
+        where: 'id = ?',
+        whereArgs: [noteId],
+      );
+
+      if (updatedRows == 0) {
+        throw Exception('Note not found');
+      }
+
+      logger.d('Note soft-deleted: ID $noteId');
+    } catch (e) {
+      logger.e('Error in NoteLocalRepository.deleteNote method: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> hardDeleteNote(int noteId) async {
+    final database = LocalDatabaseService.instance.database;
+    if (database == null) throw Exception('Database not initialized');
+
+    try {
       final deletedRows = await database.delete(
         'Notes',
         where: 'id = ?',
@@ -185,9 +201,9 @@ class NoteLocalRepository {
         throw Exception('Note not found');
       }
 
-      logger.d('Note deleted: ID $noteId');
+      logger.d('Note hard-deleted: ID $noteId');
     } catch (e) {
-      logger.e('Error in NoteLocalRepository.deleteNote method: $e');
+      logger.e('Error in NoteLocalRepository.hardDeleteNote method: $e');
       rethrow;
     }
   }
@@ -199,14 +215,12 @@ class NoteLocalRepository {
     try {
       final List<Map<String, dynamic>> notesFromDb = await database.query(
         'Notes',
-        where: 'title LIKE ? OR content LIKE ?',
+        where: '(title LIKE ? OR content LIKE ?) AND is_deleted = 0',
         whereArgs: ['%$query%', '%$query%'],
         orderBy: 'updated_at DESC',
       );
 
-      return notesFromDb
-          .map((noteJson) => Note.fromJson(noteJson))
-          .toList();
+      return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
     } catch (e) {
       logger.e('Error in NoteLocalRepository.searchNotes method: $e');
       rethrow;
@@ -220,12 +234,11 @@ class NoteLocalRepository {
     try {
       final List<Map<String, dynamic>> notesFromDb = await database.query(
         'Notes',
+        where: 'is_deleted = 0',
         orderBy: 'updated_at DESC',
       );
 
-      return notesFromDb
-          .map((noteJson) => Note.fromJson(noteJson))
-          .toList();
+      return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
     } catch (e) {
       logger.e('Error in NoteLocalRepository.getAllNotes method: $e');
       rethrow;
@@ -238,7 +251,7 @@ class NoteLocalRepository {
 
     try {
       final result = await database.rawQuery(
-        'SELECT COUNT(*) as count FROM Notes',
+        'SELECT COUNT(*) as count FROM Notes WHERE is_deleted = 0',
       );
 
       return result.first['count'] as int;
@@ -254,7 +267,7 @@ class NoteLocalRepository {
 
     try {
       final result = await database.rawQuery(
-        'SELECT COUNT(*) as count FROM Notes WHERE category_id = ?',
+        'SELECT COUNT(*) as count FROM Notes WHERE category_id = ? AND is_deleted = 0',
         [categoryId],
       );
 
@@ -272,13 +285,12 @@ class NoteLocalRepository {
     try {
       final List<Map<String, dynamic>> notesFromDb = await database.query(
         'Notes',
+        where: 'is_deleted = 0',
         orderBy: 'updated_at DESC',
         limit: limit,
       );
 
-      return notesFromDb
-          .map((noteJson) => Note.fromJson(noteJson))
-          .toList();
+      return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
     } catch (e) {
       logger.e('Error in NoteLocalRepository.getRecentNotes method: $e');
       rethrow;
@@ -304,6 +316,24 @@ class NoteLocalRepository {
       logger.d('Note category updated: ID $noteId, category: $categoryId');
     } catch (e) {
       logger.e('Error in NoteLocalRepository.updateNoteCategory method: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Note>> getNotesMarkedForDeletion() async {
+    final database = LocalDatabaseService.instance.database;
+    if (database == null) throw Exception('Database not initialized');
+
+    try {
+      final List<Map<String, dynamic>> notesFromDb = await database.query(
+        'Notes',
+        where: 'is_deleted = 1',
+      );
+
+      return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
+    } catch (e) {
+      logger.e(
+          'Error in NoteLocalRepository.getNotesMarkedForDeletion method: $e');
       rethrow;
     }
   }

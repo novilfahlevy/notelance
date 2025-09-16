@@ -5,7 +5,8 @@ class Note {
   int? categoryId;
   String? createdAt;
   String? updatedAt;
-  int? remoteId; // Changed to int?
+  int? remoteId;
+  int isDeleted; // Added isDeleted field
 
   Note({
     this.id,
@@ -14,7 +15,8 @@ class Note {
     this.categoryId,
     this.createdAt,
     this.updatedAt,
-    this.remoteId, // Changed to int?
+    this.remoteId,
+    this.isDeleted = 0, // Added with a default value of 0
   });
 
   factory Note.fromJson(Map<String, dynamic> json) {
@@ -25,7 +27,8 @@ class Note {
       categoryId: json['category_id'] as int?,
       createdAt: json['created_at'] as String?,
       updatedAt: json['updated_at'] as String?,
-      remoteId: json['remote_id'] as int?, // Changed to int?
+      remoteId: json['remote_id'] as int?,
+      isDeleted: json['is_deleted'] as int? ?? 0, // Added with a default value
     );
   }
 
@@ -37,7 +40,8 @@ class Note {
       'category_id': categoryId,
       'created_at': createdAt,
       'updated_at': updatedAt,
-      'remote_id': remoteId, // remoteId
+      'remote_id': remoteId,
+      'is_deleted': isDeleted, // Added isDeleted to JSON
     };
   }
 
@@ -48,7 +52,8 @@ class Note {
     int? categoryId,
     String? createdAt,
     String? updatedAt,
-    int? remoteId, // Changed to int?
+    int? remoteId,
+    int? isDeleted, // Added is_deleted to copyWith
   }) {
     return Note(
       id: id ?? this.id,
@@ -57,13 +62,14 @@ class Note {
       categoryId: categoryId ?? this.categoryId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      remoteId: remoteId ?? this.remoteId, // remoteId
+      remoteId: remoteId ?? this.remoteId,
+      isDeleted: isDeleted ?? this.isDeleted, // Updated copyWith with new field
     );
   }
 
   @override
   String toString() {
-    return 'Note{id: $id, title: $title, content: $content, categoryId: $categoryId, createdAt: $createdAt, updatedAt: $updatedAt, remoteId: $remoteId}'; // Added remoteId
+    return 'Note{id: $id, title: $title, content: $content, categoryId: $categoryId, createdAt: $createdAt, updatedAt: $updatedAt, remoteId: $remoteId, is_deleted: $isDeleted}'; // Updated toString
   }
 
   @override
@@ -76,7 +82,8 @@ class Note {
         other.categoryId == categoryId &&
         other.createdAt == createdAt &&
         other.updatedAt == updatedAt &&
-        other.remoteId == remoteId; // remoteId check
+        other.remoteId == remoteId &&
+        other.isDeleted == isDeleted; // Updated equality check
   }
 
   @override
@@ -87,6 +94,7 @@ class Note {
     categoryId,
     createdAt,
     updatedAt,
-    remoteId, // Added remoteId to hash
+    remoteId,
+    isDeleted, // Updated hashCode
   );
 }

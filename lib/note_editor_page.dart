@@ -364,7 +364,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Future<void> _delete() async {
     if (_note == null || _note!.id == null || _isDeleting) return;
 
-    final shouldDelete = await _showDeleteConfirmation();
+    final bool shouldDelete = await _showDeleteConfirmation();
     if (!shouldDelete) return;
 
     setState(() => _isDeleting = true);

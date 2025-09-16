@@ -86,6 +86,7 @@ class LocalDatabaseService {
         category_id INTEGER,
         created_at TEXT,
         updated_at TEXT,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (category_id) REFERENCES Categories (id) ON DELETE CASCADE
       )
     ''');

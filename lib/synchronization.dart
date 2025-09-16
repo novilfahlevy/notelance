@@ -134,48 +134,17 @@ class Synchronization {
 
   static Future<void> synchronizeNotes() async {
     try {
-      await _synchronizeNewLocalNotesToRemote();
-      await _synchronizeNewRemoteNotesToLocal(); // Added call to the modified function
-
-      /// Synchronize notes with remote id
-      final List<Note> notes = await _noteLocalRepository.getNotesWithRemoteId();
-
-      /// Fetch the remote note of each local note
-      for (int i = 0; i < notes.length; i++) {
-        // Ensure timestamps are in UTC ISO format
-        final createdAtUTC = _ensureUTCFormat(notes[i].createdAt!);
-        final updatedAtUTC = _ensureUTCFormat(notes[i].updatedAt!);
-
-        final params = 'note_id=${notes[i].remoteId}&created_at=$createdAtUTC&updated_at=$updatedAtUTC';
-
-        final Response response = await _httpClient.get(
-            '$supabaseFunctionUrl/sync-fetch?$params',
-            options: Options(
-                headers: {
-                  'Authorization': 'Bearer $supabaseServiceRoleKey',
-                  'Content-Type': 'application/json'
-                }
-            )
-        );
-
-        if (response.data['message'] == 'NOTE_IN_THE_SERVER_IS_DEPRECATED') {
-          await _handleDeprecatedServerNote(notes[i]);
-        } else if (response.data['message'] == 'NOTE_IN_THE_SERVER_IS_NEWEST') {
-          await _handleNewerServerNote(notes[i], response.data);
-        } else
-        if (response.data['message'] == 'NOTE_IS_NOT_FOUND_IN_THE_SERVER') {
-          // Handle case where note was deleted from server
-          // You might want to delete locally or re-upload
-          logger.i('Note ${notes[i].remoteId} not found on server');
-        }
-      }
+      await _notifyRemoteToDeleteNotes();
+      await _sychronizeLocalNotesWithRemote();
+      await _pushNewLocalNotesToRemote();
+      await _fetchNewRemoteNotesToLocal();
     } catch (error) {
       logger.e('Error synchronizing notes: $error');
       rethrow;
     }
   }
 
-  static Future<void> _synchronizeNewRemoteNotesToLocal() async {
+  static Future<void> _fetchNewRemoteNotesToLocal() async {
     try {
       try {
         final Response response = await _httpClient.get(
@@ -246,7 +215,7 @@ class Synchronization {
     }
   }
 
-  static Future<void> _synchronizeNewLocalNotesToRemote() async {
+  static Future<void> _pushNewLocalNotesToRemote() async {
     try {
       final List<Note> newNotes = await _noteLocalRepository.getNotesWithoutRemoteId();
       logger.i('Found ${newNotes.length} new notes to synchronize.');
@@ -315,6 +284,45 @@ class Synchronization {
     }
   }
 
+  static Future<void> _sychronizeLocalNotesWithRemote() async {
+    try {
+      /// Synchronize notes with remote id
+      final List<Note> notes = await _noteLocalRepository.getNotesWithRemoteId();
+
+      /// Fetch the remote note of each local note
+      for (int i = 0; i < notes.length; i++) {
+        // Ensure timestamps are in UTC ISO format
+        final createdAtUTC = _ensureUTCFormat(notes[i].createdAt!);
+        final updatedAtUTC = _ensureUTCFormat(notes[i].updatedAt!);
+
+        final params = 'note_id=${notes[i].remoteId}&created_at=$createdAtUTC&updated_at=$updatedAtUTC';
+
+        final Response response = await _httpClient.get(
+            '$supabaseFunctionUrl/sync-fetch?$params',
+            options: Options(
+                headers: {
+                  'Authorization': 'Bearer $supabaseServiceRoleKey',
+                  'Content-Type': 'application/json'
+                }
+            )
+        );
+
+        if (response.data['message'] == 'NOTE_IN_THE_SERVER_IS_DEPRECATED') {
+          await _handleDeprecatedServerNote(notes[i]);
+        } else if (response.data['message'] == 'NOTE_IN_THE_SERVER_IS_NEWEST') {
+          await _handleNewerServerNote(notes[i], response.data);
+        } else if (response.data['message'] == 'NOTE_IS_NOT_FOUND_IN_THE_SERVER') {
+          // Handle case where note was deleted from server
+          // You might want to delete locally or re-upload
+          logger.i('Note ${notes[i].remoteId} not found on server');
+        }
+      }
+    } catch (error) {
+      logger.e('Error synchronizing notes: $error');
+      rethrow;
+    }
+  }
+
   static Future<void> _handleDeprecatedServerNote(Note localNote) async {
     try {
       final Category? localCategory = localNote.categoryId != null
@@ -374,6 +382,7 @@ class Synchronization {
         title: serverData['title'],
         content: serverData['content'],
         remoteId: serverData['remote_id'],
+        isDeleted: serverData['is_deleted'],
         createdAt: localNote.createdAt, /// Keep original creation time
         updatedAt: serverData['updated_at'], /// Use server's updated time
       );
@@ -394,6 +403,42 @@ class Synchronization {
       await _noteLocalRepository.updateNote(remoteUpdatedNote);
     } catch (error) {
       logger.e('Error handling newer server note: $error');
+      rethrow;
+    }
+  }
+
+  static Future<void> _notifyRemoteToDeleteNotes() async {
+    try {
+      final List<Note> deletedNotes = await _noteLocalRepository.getNotesMarkedForDeletion();
+      logger.i('Found ${deletedNotes.length} notes marked for deletion to synchronize.');
+
+      for (final note in deletedNotes) {
+        if (note.remoteId != null) {
+          try {
+            final Response response = await _httpClient.delete(
+              '$supabaseFunctionUrl/notes/${note.remoteId}',
+              options: Options(
+                headers: {
+                  'Authorization': 'Bearer $supabaseServiceRoleKey',
+                  'Content-Type': 'application/json',
+                },
+              ),
+            );
+
+            // Check for a success response from the server.
+            if (response.data['message'] == 'NOTE_IS_DELETED_SUCCESSFULLY') {
+              logger.i('Note with remote ID ${note.remoteId} successfully deleted from remote server. Deleting from local DB...');
+              await _noteLocalRepository.deleteNote(note.id!);
+            } else {
+              logger.e('Failed to delete note with remote ID ${note.remoteId} from remote server. Server response: ${response.data}');
+            }
+          } catch (e) {
+            logger.e('Error while trying to delete note with remote ID ${note.remoteId}: $e');
+          }
+        }
+      }
+    } catch (error) {
+      logger.e('Error in _notifyRemoteToDeleteNotes: $error');
       rethrow;
     }
   }
