@@ -69,62 +69,106 @@ class Synchronization {
   static late final String supabaseServiceRoleKey;
   static final Dio _httpClient = Dio();
 
-  static Future<void> synchronizeCategories() async {
+  static Future<void> _synchronizeCategories() async {
     try {
-      final Response response = await _httpClient.get(
-          '$supabaseFunctionUrl/categories',
-          options: Options(
-              headers: {
-                'Authorization': 'Bearer $supabaseServiceRoleKey',
-                'Content-Type': 'application/json'
-              }
-          )
+      // Get all local categories
+      final List<Category> localCategories = await _categoryLocalRepository.getCategories();
+
+      // Prepare categories data for sync endpoint
+      final List<Map<String, dynamic>> categoriesPayload = localCategories
+          .map((category) {
+            return {
+              'id': category.id.toString(),
+              'remote_id': category.remoteId?.toString() ?? '',
+              'name': category.name,
+              'order_index': category.orderIndex ?? 0,
+              'is_deleted': 0, // Assuming categories are not soft-deleted in your current implementation
+              'updated_at': DateTime.now().toUtc().toIso8601String(), // You might want to add updated_at field to Category model
+              'created_at': DateTime.now().toUtc().toIso8601String(), // You might want to add created_at field to Category model
+            };
+          })
+          .toList();
+
+      // Make sync request
+      final Response response = await _httpClient.post(
+        '$supabaseFunctionUrl/categories/sync',
+        data: { 'categories': categoriesPayload },
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $supabaseServiceRoleKey',
+            'Content-Type': 'application/json',
+          },
+        ),
       );
 
-      if (response.data['message'] == 'CATEGORIES_IS_FETCHED_SUCCESSFULLY') {
-        final List<dynamic> remoteCategories = response
-            .data['categories'] as List<dynamic>;
+      if (response.data['state'] == 'CATEGORIES_HAVE_SYNCED') {
+        final List<dynamic> categoryResponses = response.data['categories'] as List<dynamic>;
 
-        for (int i = 0; i < remoteCategories.length; i++) {
-          final remoteCategory = remoteCategories[i];
-          final Category? localCategorySameByName = await _categoryLocalRepository
-              .getCategoryByName(remoteCategory['name']);
+        for (final categoryResponse in categoryResponses) {
+          final Map<String, dynamic> categoryData = categoryResponse as Map<String, dynamic>;
+          final String localCategoryId = categoryData['id'];
+          final Category localCategory = localCategories.firstWhere(
+                (cat) => cat.id.toString() == localCategoryId,
+                orElse: () => throw Exception('Local category not found'),
+          );
 
-          if (localCategorySameByName != null) {
-            /// Update the local database.
-            await _categoryLocalRepository.updateCategory(
-                localCategorySameByName.id!,
-                orderIndex: remoteCategory['order_index'],
-                remoteId: remoteCategory['remote_id']
-            );
-          } else {
-            /// Create new one into the local database.
-            await _categoryLocalRepository.createCategory(
-              name: remoteCategory['name'],
-              orderIndex: remoteCategory['order_index'],
-              remoteId: remoteCategory['remote_id'],
-            );
+          switch (categoryData['state']) {
+            case 'CATEGORY_ID_IS_NOT_PROVIDED':
+              // Category was created on server, update local with remote_id
+              if (categoryData['remote_id'] != null) {
+                await _categoryLocalRepository.updateCategory(
+                  localCategory.id!,
+                  remoteId: int.parse(categoryData['remote_id'].toString()),
+                );
+                logger.i('Updated local category ${localCategory.name} with remote_id: ${categoryData['remote_id']}');
+              } else {
+                logger.e('Failed to create category ${localCategory.name} on server: ${categoryData['message']}');
+              }
+            break;
+
+            case 'CATEGORY_IN_THE_REMOTE_IS_NEWER':
+              // Update local category with server data
+              await _categoryLocalRepository.updateCategory(
+                localCategory.id!,
+                name: categoryData['name'],
+                orderIndex: categoryData['order_index'],
+              );
+              logger.i('Updated local category ${localCategory.name} with newer server data');
+            break;
+
+            case 'CATEGORY_IN_THE_REMOTE_IS_DEPRECATED':
+              if (categoryData['message'] != null && categoryData['message'].contains('updated')) {
+                logger.i('Successfully updated server category for ${localCategory.name}');
+              } else {
+                logger.e('Failed to update server category for ${localCategory.name}: ${categoryData['message']}');
+              }
+            break;
+
+            case 'CATEGORY_ID_IS_NOT_VALID':
+              logger.e('Invalid remote_id for category ${localCategory.name}: ${categoryData['remote_id']}');
+            break;
+
+            case 'AN_ERROR_OCCURED_IN_THIS_CATEGORY':
+              logger.e('Error occurred for category ${localCategory.name}: ${categoryData['errorMessage']}');
+            break;
+
+            case 'CATEGORY_IS_NOT_FOUND_IN_THE_REMOTE':
+              logger.i('Category ${localCategory.name} not found on server - it may have been deleted remotely');
+              // Optionally handle deletion - you might want to delete locally or re-create on server
+            break;
+
+            case 'CATEGORY_IN_THE_REMOTE_IS_THE_SAME':
+              logger.d('Category ${localCategory.name} is in sync');
+            break;
+
+            default:
+              logger.w('Unknown sync state for category ${localCategory.name}: ${categoryData['state']}');
           }
         }
-
-        /// Deletes all local categories with remote_id that it is does not exist in the remote database.
-        /// TODO: This can be more optimized. Try to optimize it later.
-        final List<int> remoteIds = remoteCategories
-            .map((dynamic remoteCategory) => remoteCategory['remote_id'] as int)
-            .toList();
-
-        final localCategories = await _categoryLocalRepository.getCategories();
-        final List<Category> localCategoriesWithRemoteId = localCategories
-            .where((Category category) => category.remoteId != null)
-            .toList();
-
-        for (int i = 0; i < localCategoriesWithRemoteId.length; i++) {
-          final Category localCategoryWithRemoteId = localCategoriesWithRemoteId[i];
-          if (!remoteIds.contains(localCategoryWithRemoteId.remoteId)) {
-            await _categoryLocalRepository.deleteCategory(
-                localCategoryWithRemoteId.id!);
-          }
-        }
+      } else if (response.data['state'] == 'CATEGORIES_SYNC_IS_FAILED') {
+        throw Exception('Categories sync failed: ${response.data['errorMessage']}');
+      } else {
+        throw Exception('Unexpected response state: ${response.data['state']}');
       }
     } catch (error) {
       logger.e('Error synchronizing categories: $error');
@@ -132,12 +176,50 @@ class Synchronization {
     }
   }
 
-  static Future<void> synchronizeNotes() async {
+  static Future<void> _fetchNewCategoriesFromServer() async {
     try {
-      await _notifyRemoteToDeleteNotes();
-      await _sychronizeLocalNotesWithRemote();
-      await _pushNewLocalNotesToRemote();
-      await _fetchNewRemoteNotesToLocal();
+      final Response response = await _httpClient.get(
+        '$supabaseFunctionUrl/categories',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $supabaseServiceRoleKey',
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
+
+      if (response.data['message'] == 'CATEGORIES_IS_FETCHED_SUCCESSFULLY') {
+        final List<dynamic> remoteCategories = response.data['categories'] as List<dynamic>;
+
+        for (final remoteCategoryData in remoteCategories) {
+          final int remoteId = remoteCategoryData['remote_id'] ?? remoteCategoryData['id'];
+          final Category? existingCategory = await _categoryLocalRepository.getCategoryByRemoteId(remoteId);
+
+          if (existingCategory == null) {
+            // Create new category locally
+            await _categoryLocalRepository.createCategory(
+              name: remoteCategoryData['name'],
+              orderIndex: remoteCategoryData['order_index'],
+              remoteId: remoteId,
+            );
+            logger.i('Created new local category from server: ${remoteCategoryData['name']}');
+          }
+        }
+      }
+    } catch (error) {
+      logger.e('Error fetching new categories from server: $error');
+      // Don't rethrow here as this is a supplementary operation
+    }
+  }
+
+  static Future<void> _synchronizeNotes() async {
+    try {
+      await Future.wait([
+        _notifyRemoteToDeleteNotes(),
+        _sychronizeLocalNotesWithRemote(),
+        _pushNewLocalNotesToRemote(),
+        _fetchNewRemoteNotesToLocal()
+      ]);
     } catch (error) {
       logger.e('Error synchronizing notes: $error');
       rethrow;
@@ -461,9 +543,7 @@ class Synchronization {
 
   static Future<Map<String, dynamic>> run() async {
     try {
-      await synchronizeCategories();
-      await synchronizeNotes();
-
+      await Future.wait([_synchronizeCategories(), _fetchNewCategoriesFromServer(), _synchronizeNotes()]);
       return {
         'categoriesSync': 'success',
         'notesSync': 'success',
