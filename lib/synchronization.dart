@@ -216,7 +216,7 @@ class Synchronization {
     try {
       await Future.wait([
         _notifyRemoteToDeleteNotes(),
-        _sychronizeLocalNotesWithRemote(),
+        _synchronizeLocalNotesWithRemote(),
         _pushNewLocalNotesToRemote(),
         _fetchNewRemoteNotesToLocal()
       ]);
@@ -366,7 +366,7 @@ class Synchronization {
     }
   }
 
-  static Future<void> _sychronizeLocalNotesWithRemote() async {
+  static Future<void> _synchronizeLocalNotesWithRemote() async {
     try {
       /// Synchronize notes with remote id
       final List<Note> notes = await _noteLocalRepository.getNotesWithRemoteId();
