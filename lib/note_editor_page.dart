@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:delta_to_html/delta_to_html.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
@@ -483,7 +484,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       }
 
       final FunctionResponse response = await Supabase.instance.client.functions.invoke(
-        'hello-world/sync-send',
+        '${dotenv.env['SUPABASE_FUNCTION_NAME']!}/notes',
         method: HttpMethod.post,
         body: notePayload,
       );
@@ -516,7 +517,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     try {
       final FunctionResponse response = await Supabase.instance.client.functions.invoke(
-          'hello-world/notes/${_note!.remoteId}',
+          '${dotenv.env['SUPABASE_FUNCTION_NAME']!}/notes/${_note!.remoteId}',
           method: HttpMethod.delete
       );
 
@@ -540,7 +541,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     try {
       final FunctionResponse response = await Supabase.instance.client.functions.invoke(
-        'hello-world/categories',
+        '${dotenv.env['SUPABASE_FUNCTION_NAME']!}/categories',
         method: HttpMethod.post,
         body: category.toJson(),
       );

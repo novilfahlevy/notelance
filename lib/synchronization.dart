@@ -297,7 +297,7 @@ class Synchronization {
             remoteId: responseData['remote_id'],
             title: responseData['title'],
             content: responseData['content'],
-            isDeleted: responseData['is_deleted'] ? 1 : 0,
+            isDeleted: responseData['is_deleted'],
             updatedAt: responseData['updated_at'],
           );
 
@@ -361,7 +361,7 @@ class Synchronization {
   static Future<void> _fetchNewNotesFromRemote() async {
     try {
       final Response response = await _httpClient.get(
-        '$supabaseFunctionUrl/sync-fetch-all',
+        '$supabaseFunctionUrl/notes',
         options: Options(
           headers: {
             'Authorization': 'Bearer $supabaseServiceRoleKey',
@@ -445,17 +445,11 @@ class Synchronization {
       /// Make it sure to syncs and fetches the categories first before the notes
       await Future.wait([
         _synchronizeLocalCategoriesWithRemote(),
-        _fetchNewCategoriesFromRemote(),
+        _fetchNewCategoriesFromRemote()
+      ]).then((_) => Future.wait([
         _synchronizeLocalNotesWithRemote(),
         _fetchNewNotesFromRemote()
-      ]);
-      // Future.wait([
-      // ])
-      // .then((_) async {
-      // })
-      // .catchError((error) {
-      //   logger.e('Error when sync and fetch categories: $error');
-      // });
+      ]));
 
       return {
         'categoriesSync': 'success',
