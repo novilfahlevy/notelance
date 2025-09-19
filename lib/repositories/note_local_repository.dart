@@ -227,7 +227,7 @@ class NoteLocalRepository {
     }
   }
 
-  Future<List<Note>> getAllNotes() async {
+  Future<List<Note>> getNotes() async {
     final database = LocalDatabaseService.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
@@ -240,7 +240,7 @@ class NoteLocalRepository {
 
       return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
     } catch (e) {
-      logger.e('Error in NoteLocalRepository.getAllNotes method: $e');
+      logger.e('Error in NoteLocalRepository.getNotes method: $e');
       rethrow;
     }
   }
