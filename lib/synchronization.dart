@@ -2,6 +2,7 @@ import 'dart:isolate';
 import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
 import 'package:dio/dio.dart';
+import 'package:notelance/responses/synchronization_response.dart';
 import 'package:notelance/sqflite.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
 import 'package:notelance/repositories/note_local_repository.dart';
@@ -90,7 +91,7 @@ class Synchronization {
           .toList();
 
       // Make sync request
-      final Response response = await _httpClient.post(
+      final Response httpResponse = await _httpClient.post(
         '$supabaseFunctionUrl/categories/sync',
         data: { 'categories': categoriesPayload },
         options: Options(
@@ -100,9 +101,10 @@ class Synchronization {
           },
         ),
       );
+      final response = CategoriesSyncResponse.fromJson(httpResponse.data);
 
-      if (response.data['state'] == 'CATEGORIES_HAVE_SYNCED') {
-        final List<dynamic> categoryResponses = response.data['categories'] as List<dynamic>;
+      if (response.state == 'CATEGORIES_HAVE_SYNCED') {
+        final List<dynamic> categoryResponses = response.categories;
 
         for (final categoryResponse in categoryResponses) {
           final Map<String, dynamic> responseData = categoryResponse as Map<String, dynamic>;
@@ -113,10 +115,10 @@ class Synchronization {
           );
           await _handleCategoryResponse(localCategory, responseData);
         }
-      } else if (response.data['state'] == 'CATEGORIES_SYNC_IS_FAILED') {
-        throw Exception('Categories sync failed: ${response.data['errorMessage']}');
+      } else if (response.state == 'CATEGORIES_SYNC_IS_FAILED') {
+        throw Exception('Categories sync failed: ${response.errorMessage}');
       } else {
-        throw Exception('Unexpected response state: ${response.data['state']}');
+        throw Exception('Unexpected response state: ${response.state}');
       }
     } catch (error) {
       logger.e('Error synchronizing categories: $error');
@@ -128,52 +130,56 @@ class Synchronization {
     try {
       switch (responseData['state']) {
         case 'CATEGORY_ID_IS_NOT_PROVIDED':
-        // Category was created on server, update local with remote_id
-          if (responseData['remote_id'] != null) {
+          // Category was created on server, update local with remote_id
+          final categoryResponse = RemoteCategoryIdIsNotFoundResponse.fromJson(responseData);
+          if (categoryResponse.remoteId != null) {
             await _categoryLocalRepository.updateCategory(
               localCategory.id!,
-              remoteId: int.parse(responseData['remote_id'].toString()),
+              remoteId: int.parse(categoryResponse.remoteId.toString()),
             );
-            logger.i('Updated local category ${localCategory.name} with remote_id: ${responseData['remote_id']}');
+            logger.i('Updated local category ${localCategory.name} with remote_id: ${categoryResponse.remoteId}');
           } else {
-            logger.e('Failed to create category ${localCategory.name} on server: ${responseData['message']}');
+            logger.e('Failed to create category ${localCategory.name} on server: ${categoryResponse.message}');
           }
-          break;
+        break;
 
         case 'CATEGORY_IN_THE_REMOTE_IS_NEWER':
-        // Update local category with server data
+          // Update local category with server data
+          final categoryResponse = RemoteCategoryIsNewerResponse.fromJson(responseData);
           await _categoryLocalRepository.updateCategory(
             localCategory.id!,
-            name: responseData['name'],
-            orderIndex: responseData['order_index'],
+            name: categoryResponse.name,
+            orderIndex: categoryResponse.orderIndex,
           );
           logger.i('Updated local category ${localCategory.name} with newer server data');
-          break;
+        break;
 
         case 'CATEGORY_IN_THE_REMOTE_IS_DEPRECATED':
-          if (responseData['message'] != null && responseData['message'].contains('updated')) {
+          final categoryResponse = RemoteCategoryIsDeprecatedResponse.fromJson(responseData);
+          if (categoryResponse.message != null && categoryResponse.message!.contains('updated')) {
             logger.i('Successfully updated server category for ${localCategory.name}');
           } else {
-            logger.e('Failed to update server category for ${localCategory.name}: ${responseData['message']}');
+            logger.e('Failed to update server category for ${localCategory.name}.');
           }
-          break;
+        break;
 
         case 'CATEGORY_ID_IS_NOT_VALID':
-          logger.e('Invalid remote_id for category ${localCategory.name}: ${responseData['remote_id']}');
-          break;
+          final categoryResponse = RemoteCategoryIdIsNotValidResponse.fromJson(responseData);
+          logger.e('Invalid remote_id for category ${localCategory.name}: ${categoryResponse.remoteId}');
+        break;
 
         case 'AN_ERROR_OCCURED_IN_THIS_CATEGORY':
-          logger.e('Error occurred for category ${localCategory.name}: ${responseData['errorMessage']}');
-          break;
+          final categoryResponse = ErrorIsOccuredResponse.fromJson(responseData);
+          logger.e('Error occurred for category ${localCategory.name}: ${categoryResponse.errorMessage}');
+        break;
 
         case 'CATEGORY_IS_NOT_FOUND_IN_THE_REMOTE':
           logger.i('Category ${localCategory.name} not found on server - it may have been deleted remotely');
-          // Optionally handle deletion - you might want to delete locally or re-create on server
-          break;
+        break;
 
         case 'CATEGORY_IN_THE_REMOTE_IS_THE_SAME':
           logger.d('Category ${localCategory.name} is in sync');
-          break;
+        break;
 
         default:
           logger.w('Unknown sync state for category ${localCategory.name}: ${responseData['state']}');

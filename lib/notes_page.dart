@@ -71,8 +71,8 @@ class _NotesPageState extends State<NotesPage>
   }
 
   String _formatDate(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
+    final now = DateTime.now().toUtc();
+    final difference = now.difference(dateTime.toUtc());
 
     if (difference.inDays == 0) {
       if (difference.inHours == 0) {
@@ -80,10 +80,11 @@ class _NotesPageState extends State<NotesPage>
           return 'Baru saja';
         }
         return '${difference.inMinutes} menit yang lalu';
+      } else if (difference.inHours < 7) {
+        return '${difference.inHours} jam yang lalu';
+      } else {
+        return 'Kemarin';
       }
-      return '${difference.inHours} jam yang lalu';
-    } else if (difference.inDays == 1) {
-      return 'Kemarin';
     } else if (difference.inDays < 7) {
       return '${difference.inDays} hari yang lalu';
     } else {

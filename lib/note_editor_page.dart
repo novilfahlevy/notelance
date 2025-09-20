@@ -307,7 +307,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
       final String title = _titleController.text.trim();
       final Delta delta = _contentController.document.toDelta();
-      final String now = DateTime.now().toIso8601String();
+      final String now = DateTime.now().toUtc().toIso8601String();
       final bool isNewNote = _note == null || _note!.id == null;
 
       if (isNewNote) {
