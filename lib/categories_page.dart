@@ -57,24 +57,24 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
   Future<void> _addCategory(String name) async {
     try {
-      final category = await _categoryLocalRepository.createCategory(name: name);
+      final category = await _categoryLocalRepository.create(name: name);
 
       final remoteId = await _storeCategoryRemote(category);
       if (remoteId != null) category.remoteId = remoteId;
 
       setState(() => _categories..add(category)..sort((a, b) => a.orderIndex.compareTo(b.orderIndex)));
-      context.read<CategoriesNotifier>().reloadCategories();
+      if (mounted) context.read<CategoriesNotifier>().reloadCategories();
 
       _showSnackBar('Berhasil menambah kategori.', Colors.green);
     } catch (e) {
       logger.e('Error adding category: $e');
-      _showSnackBar('Telah terjadi kesalahan, gagal membuat kategori.', Theme.of(context).colorScheme.error);
+      if (mounted) _showSnackBar('Telah terjadi kesalahan, gagal membuat kategori.', Theme.of(context).colorScheme.error);
     }
   }
 
   Future<void> _editCategory(Category category, String newName) async {
     try {
-      await _categoryLocalRepository.updateCategory(category.id!, name: newName);
+      await _categoryLocalRepository.update(category.id!, name: newName);
 
       if (category.remoteId != null) {
         await _updateCategoryRemote(remoteId: category.remoteId!, name: newName);
@@ -85,32 +85,32 @@ class _CategoriesPageState extends State<CategoriesPage> {
         if (idx != -1) _categories[idx] = _categories[idx].copyWith(name: newName);
       });
 
-      context.read<CategoriesNotifier>().reloadCategories();
+      if (mounted) context.read<CategoriesNotifier>().reloadCategories();
       _showSnackBar('Berhasil mengedit kategori.', Colors.green);
     } catch (e) {
       logger.e('Error updating category: $e');
-      _showSnackBar('Telah terjadi kesalahan, gagal mengedit kategori.', Theme.of(context).colorScheme.error);
+      if (mounted) _showSnackBar('Telah terjadi kesalahan, gagal mengedit kategori.', Theme.of(context).colorScheme.error);
     }
   }
 
   Future<void> _deleteCategory(Category category) async {
     try {
-      final notesCount = await _categoryLocalRepository.getCategoryNotesCount(category.id!);
+      final notesCount = await _categoryLocalRepository.getNotesCount(category.id!);
       if (notesCount > 0) {
         final confirm = await _showDeleteDialog(category.name, notesCount);
         if (!confirm) return;
       }
 
-      await _categoryLocalRepository.deleteCategory(category.id!);
+      await _categoryLocalRepository.delete(category.id!);
       if (category.remoteId != null) await _deleteCategoryRemote(category.remoteId!);
 
       setState(() => _categories.removeWhere((c) => c.id == category.id));
-      context.read<CategoriesNotifier>().reloadCategories();
+      if (mounted) context.read<CategoriesNotifier>().reloadCategories();
 
       _showSnackBar('Kategori berhasil dihapus.', Colors.green);
     } catch (e) {
       logger.e('Error deleting category: $e');
-      _showSnackBar('Telah terjadi kesalahan, gagal menghapus kategori.', Theme.of(context).colorScheme.error);
+      if (mounted) _showSnackBar('Telah terjadi kesalahan, gagal menghapus kategori.', Theme.of(context).colorScheme.error);
     }
   }
 
@@ -126,12 +126,12 @@ class _CategoriesPageState extends State<CategoriesPage> {
     });
 
     try {
-      await _categoryLocalRepository.renewCategoriesOrder(_categories);
-      context.read<CategoriesNotifier>().reloadCategories();
+      await _categoryLocalRepository.renewOrders(_categories);
+      if (mounted) context.read<CategoriesNotifier>().reloadCategories();
       logger.i('Categories reordered successfully');
     } catch (e) {
       logger.e('Error reordering categories: $e');
-      _showSnackBar('Gagal mengubah urutan kategori: $e', Theme.of(context).colorScheme.error);
+      if (mounted) _showSnackBar('Gagal mengubah urutan kategori: $e', Theme.of(context).colorScheme.error);
     }
   }
 
@@ -152,7 +152,11 @@ class _CategoriesPageState extends State<CategoriesPage> {
       final message = response.data['message'];
       if (['CATEGORY_IS_CREATED_SUCCESSFULLY', 'CATEGORY_IS_EXISTED'].contains(message)) {
         final remoteId = response.data['remote_id'];
-        await _categoryLocalRepository.updateCategory(category.id!, remoteId: remoteId);
+        await _categoryLocalRepository.update(
+          category.id!,
+          remoteId: remoteId,
+          updatedAt: response.data['updated_at']
+        );
         return remoteId;
       }
     } catch (e) {
@@ -244,23 +248,22 @@ class _CategoriesPageState extends State<CategoriesPage> {
               if (name.isEmpty || (isEdit && name == category.name)) return;
 
               try {
-                final existing = await _categoryLocalRepository.getCategoryByName(name);
-                if (existing != null && existing.id != category?.id && context.mounted) {
+                final existing = await _categoryLocalRepository.getByName(name);
+                if (existing != null && existing.id != category?.id && mounted) {
                   _showSnackBar('Kategori "$name" sudah ada', Theme.of(context).colorScheme.surfaceVariant);
                   return;
                 }
 
-                Navigator.pop(context);
+                if (mounted) Navigator.pop(context);
                 isEdit ? _editCategory(category, name) : _addCategory(name);
               } catch (e) {
                 logger.e('Error checking category name: $e');
-                final exists = _categories.any((c) =>
-                c.id != category?.id && c.name.toLowerCase() == name.toLowerCase());
+                final exists = _categories.any((c) => c.id != category?.id && c.name.toLowerCase() == name.toLowerCase());
                 if (exists) {
-                  _showSnackBar('Kategori "$name" sudah ada', Theme.of(context).colorScheme.surfaceVariant);
+                  if (mounted) _showSnackBar('Kategori "$name" sudah ada', Theme.of(context).colorScheme.surfaceVariant);
                   return;
                 }
-                Navigator.pop(context);
+                if (mounted) Navigator.pop(context);
                 isEdit ? _editCategory(category, name) : _addCategory(name);
               }
             },

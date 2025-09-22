@@ -44,10 +44,10 @@ class _NotesPageState extends State<NotesPage>
 
       if (widget.category != null) {
         // Changed: Used _noteRepository
-        notes = await _noteRepository.getNotesByCategory(widget.category!.id!);
+        notes = await _noteRepository.getByCategory(widget.category!.id!);
       } else {
         // Changed: Used _noteRepository
-        notes = await _noteRepository.getUncategorizedNotes();
+        notes = await _noteRepository.getUncategorized();
       }
 
       setState(() {
@@ -147,7 +147,7 @@ class _NotesPageState extends State<NotesPage>
       color: colorScheme.primary,
       child: ListView.separated(
         padding: const EdgeInsets.all(10),
-        physics: const AlwaysScrollableScrollPhysics(), // 👈 ensures pull even if few items
+        physics: const AlwaysScrollableScrollPhysics(),
         itemCount: _notes.length,
         itemBuilder: (context, index) {
           if (index >= _notes.length - 1) {
@@ -158,7 +158,7 @@ class _NotesPageState extends State<NotesPage>
                   onEdit: _goToNoteEditor,
                   formatDate: _formatDate,
                 ),
-                SizedBox(height: 300,)
+                SizedBox(height: 200,)
               ],
             );
           }

@@ -72,7 +72,9 @@ class LocalDatabaseService {
         remote_id INTEGER,
         name TEXT NOT NULL,
         order_index INTEGER DEFAULT 0,
-        created_at INTEGER
+        created_at INTEGER,
+        updated_at INTEGER,
+        is_deleted INTEGER NOT NULL DEFAULT 0
       )
     ''');
 

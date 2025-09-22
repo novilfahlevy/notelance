@@ -77,7 +77,7 @@ class _SearchPageState extends State<SearchPage> {
     }
 
     try {
-      final searchedNotes = await _noteRepository.searchNotes(query);
+      final searchedNotes = await _noteRepository.search(query);
 
       if (mounted) {
         setState(() {
@@ -194,7 +194,7 @@ class _SearchPageState extends State<SearchPage> {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 4, bottom: 200),
       itemCount: _notes.length,
       itemBuilder: (context, index) {
         final note = _notes[index];

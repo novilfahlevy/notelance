@@ -73,21 +73,21 @@ class Synchronization {
   static Future<void> _synchronizeLocalCategoriesWithRemote() async {
     try {
       // Get all local categories
-      final List<Category> localCategories = await _categoryLocalRepository.getCategories();
+      final List<Category> localCategories = await _categoryLocalRepository.getWithTrashed();
 
       // Prepare categories data for sync endpoint
       final List<Map<String, dynamic>> categoriesPayload = localCategories
           .map((category) {
-        return {
-          'id': category.id.toString(),
-          'remote_id': category.remoteId?.toString() ?? '',
-          'name': category.name,
-          'order_index': category.orderIndex ?? 0,
-          'is_deleted': 0, // Assuming categories are not soft-deleted in your current implementation
-          'updated_at': DateTime.now().toUtc().toIso8601String(), // You might want to add updated_at field to Category model
-          'created_at': DateTime.now().toUtc().toIso8601String(), // You might want to add created_at field to Category model
-        };
-      })
+            return {
+              'id': category.id.toString(),
+              'name': category.name,
+              'order_index': category.orderIndex,
+              'remote_id': category.remoteId?.toString() ?? '',
+              'is_deleted': category.isDeleted,
+              'created_at': category.createdAt,
+              'updated_at': category.updatedAt,
+            };
+          })
           .toList();
 
       // Make sync request
@@ -133,9 +133,9 @@ class Synchronization {
           // Category was created on server, update local with remote_id
           final categoryResponse = RemoteCategoryIdIsNotFoundResponse.fromJson(responseData);
           if (categoryResponse.remoteId != null) {
-            await _categoryLocalRepository.updateCategory(
+            await _categoryLocalRepository.update(
               localCategory.id!,
-              remoteId: int.parse(categoryResponse.remoteId.toString()),
+              remoteId: int.parse(categoryResponse.remoteId.toString())
             );
             logger.i('Updated local category ${localCategory.name} with remote_id: ${categoryResponse.remoteId}');
           } else {
@@ -146,10 +146,11 @@ class Synchronization {
         case 'CATEGORY_IN_THE_REMOTE_IS_NEWER':
           // Update local category with server data
           final categoryResponse = RemoteCategoryIsNewerResponse.fromJson(responseData);
-          await _categoryLocalRepository.updateCategory(
+          await _categoryLocalRepository.update(
             localCategory.id!,
             name: categoryResponse.name,
             orderIndex: categoryResponse.orderIndex,
+            updatedAt: categoryResponse.updatedAt
           );
           logger.i('Updated local category ${localCategory.name} with newer server data');
         break;
@@ -206,11 +207,11 @@ class Synchronization {
 
         for (final remoteCategoryData in remoteCategories) {
           final int remoteId = remoteCategoryData['remote_id'] ?? remoteCategoryData['id'];
-          final Category? existingCategory = await _categoryLocalRepository.getCategoryByRemoteId(remoteId);
+          final Category? existingCategory = await _categoryLocalRepository.getByRemoteId(remoteId);
 
           if (existingCategory == null) {
             // Create new category locally
-            await _categoryLocalRepository.createCategory(
+            await _categoryLocalRepository.create(
               name: remoteCategoryData['name'],
               orderIndex: remoteCategoryData['order_index'],
               remoteId: remoteId,
@@ -228,7 +229,7 @@ class Synchronization {
   static Future<void> _synchronizeLocalNotesWithRemote() async {
     try {
       // Get all local notes that need syncing (both deleted and active)
-      final List<Note> localNotes = await _noteLocalRepository.getNotes();
+      final List<Note> localNotes = await _noteLocalRepository.getWithTrashed();
 
       // Prepare notes data for sync endpoint
       final List<Map<String, dynamic>> notesPayload = localNotes.map((note) {
@@ -285,12 +286,10 @@ class Synchronization {
         case 'NOTE_ID_IS_NOT_PROVIDED':
           // Note was created on server, update local with remote_id
           if (responseData['remoteId'] != null) {
-            final updatedNote = localNote.copyWith(
+            await _noteLocalRepository.update(localNote.id!,
               remoteId: int.parse(responseData['remoteId'].toString()),
-              createdAt: responseData['created_at'] ?? localNote.createdAt,
-              updatedAt: responseData['updated_at'] ?? localNote.updatedAt,
+              updatedAt: localNote.updatedAt!
             );
-            await _noteLocalRepository.updateNote(updatedNote);
             logger.i('Updated local note ${localNote.title} with remote_id: ${responseData['remoteId']}');
           } else {
             logger.e('Failed to create note ${localNote.title} on server: ${responseData['message']}');
@@ -298,27 +297,26 @@ class Synchronization {
         break;
 
         case 'NOTE_IN_THE_REMOTE_IS_NEWER':
-          // Update local note with server data
-          final updatedNote = localNote.copyWith(
-            remoteId: responseData['remote_id'],
-            title: responseData['title'],
-            content: responseData['content'],
-            isDeleted: responseData['is_deleted'],
-            updatedAt: responseData['updated_at'],
-          );
+          int? categoryId;
 
           // Handle category update
           final String? remoteCategoryId = responseData['category_id']?.toString();
           if (remoteCategoryId != null && remoteCategoryId.isNotEmpty) {
-            final Category? localCategory = await _categoryLocalRepository.getCategoryByRemoteId(int.parse(remoteCategoryId));
+            final Category? localCategory = await _categoryLocalRepository.getByRemoteId(int.parse(remoteCategoryId));
             if (localCategory != null) {
-              updatedNote.categoryId = localCategory.id;
+              categoryId = localCategory.id;
             }
-          } else {
-            updatedNote.categoryId = null;
           }
 
-          await _noteLocalRepository.updateNote(updatedNote);
+          await _noteLocalRepository.update(localNote.id!,
+            title: responseData['title'],
+            content: responseData['content'],
+            categoryId: categoryId,
+            remoteId: responseData['remote_id'],
+            isDeleted: responseData['is_deleted'],
+            updatedAt: responseData['updated_at'],
+          );
+
           logger.i('Updated local note ${localNote.title} with newer server data');
         break;
 
@@ -342,7 +340,7 @@ class Synchronization {
           logger.i('Note ${localNote.title} not found on server - it may have been deleted remotely');
           // If the note was marked for deletion locally and doesn't exist on server, hard delete it
           if (localNote.isDeleted == 1) {
-            await _noteLocalRepository.hardDeleteNote(localNote.id!);
+            await _noteLocalRepository.delete(localNote.id!);
             logger.i('Hard deleted local note ${localNote.title} as it was not found on server');
           }
         break;
@@ -351,7 +349,7 @@ class Synchronization {
           logger.d('Note ${localNote.title} is in sync');
           // If note was marked for deletion and successfully synced, soft-delete it
           if (localNote.isDeleted == 1) {
-            await _noteLocalRepository.deleteNote(localNote.id!);
+            await _noteLocalRepository.delete(localNote.id!);
             logger.i('Hard deleted synced note ${localNote.title}');
           }
         break;
@@ -392,33 +390,31 @@ class Synchronization {
             final DateTime createdAtUtc = DateTime.parse(createdAtStringFromServer);
             final DateTime updatedAtUtc = DateTime.parse(updatedAtStringFromServer);
 
-            final String createdAtLocal = createdAtUtc.toLocal().toIso8601String();
-            final String updatedAtLocal = updatedAtUtc.toLocal().toIso8601String();
-
-            final Note newNote = Note(
-              title: remoteNoteData['title'],
-              content: remoteNoteData['content'],
-              remoteId: currentRemoteNoteId,
-              createdAt: createdAtLocal,
-              updatedAt: updatedAtLocal,
-              isDeleted: remoteNoteData['is_deleted'] ?? 0,
-            );
+            int? categoryId;
 
             // Attach the category to the note
             final int? remoteCategoryId = remoteNoteData['remote_category_id'];
             if (remoteCategoryId != null) {
-              Category? localCategory = await _categoryLocalRepository.getCategoryByRemoteId(remoteCategoryId);
-              localCategory ??= await _categoryLocalRepository.createCategory(
+              Category? localCategory = await _categoryLocalRepository.getByRemoteId(remoteCategoryId);
+              localCategory ??= await _categoryLocalRepository.create(
                   name: remoteNoteData['remote_category_name'],
                   remoteId: remoteCategoryId,
                   orderIndex: remoteNoteData['remote_category_order_index']
               );
-              newNote.categoryId = localCategory.id!;
+              categoryId = localCategory.id;
             }
 
             // Insert the remote note to the local database
-            await _noteLocalRepository.createNote(newNote);
-            logger.i('Created new local note from server: ${newNote.title}');
+            await _noteLocalRepository.create(
+                title: remoteNoteData['title'],
+                content: remoteNoteData['content'],
+                categoryId: categoryId,
+                remoteId: currentRemoteNoteId,
+                createdAt: createdAtUtc.toIso8601String(),
+                updatedAt: updatedAtUtc.toIso8601String(),
+                isDeleted: remoteNoteData['is_deleted'],
+            );
+            logger.i('Created new local note from server: ${remoteNoteData['title']}');
           }
         }
       } else {
@@ -448,14 +444,10 @@ class Synchronization {
 
   static Future<Map<String, dynamic>> run() async {
     try {
-      /// Make it sure to syncs and fetches the categories first before the notes
-      await Future.wait([
-        _synchronizeLocalCategoriesWithRemote(),
-        _fetchNewCategoriesFromRemote()
-      ]).then((_) => Future.wait([
-        _synchronizeLocalNotesWithRemote(),
-        _fetchNewNotesFromRemote()
-      ]));
+      await _synchronizeLocalCategoriesWithRemote();
+      await _fetchNewCategoriesFromRemote();
+      await _synchronizeLocalNotesWithRemote();
+      await _fetchNewNotesFromRemote();
 
       return {
         'categoriesSync': 'success',

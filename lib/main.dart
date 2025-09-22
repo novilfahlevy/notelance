@@ -231,7 +231,7 @@ class _NotelanceState extends State<Notelance> {
     if (categoriesNotifier.shouldReloadCategories) {
       try {
         final categoryLocalRepository = CategoryLocalRepository();
-        final categories = await categoryLocalRepository.getCategories();
+        final categories = await categoryLocalRepository.get();
         setState(() => _categories = categories);
       } catch (e) {
         logger.e(e.toString());

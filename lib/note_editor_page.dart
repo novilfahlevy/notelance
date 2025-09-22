@@ -140,7 +140,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   Future<void> _loadCategories() async {
     try {
-      final categories = await _categoryRepository.getCategories();
+      final categories = await _categoryRepository.get();
 
       if (!mounted) return;
 
@@ -156,7 +156,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     try {
       // Changed: Used _noteRepository
-      final note = await _noteRepository.getNoteById(_note!.id!);
+      final note = await _noteRepository.getById(_note!.id!);
 
       if (note == null) {
         _showErrorSnackBar('Catatan tidak ditemukan');
@@ -241,7 +241,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
 
     try {
-      final existingCategory = await _categoryRepository.getCategoryByName(name.trim());
+      final existingCategory = await _categoryRepository.getByName(name.trim());
       if (existingCategory != null) {
         return 'Kategori "${name.trim()}" sudah ada.';
       }
@@ -261,7 +261,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Future<Category> _createNewCategory(String categoryName) async {
     try {
       // Create category using the repository
-      final newCategory = await _categoryRepository.createCategory(name: categoryName.trim());
+      final newCategory = await _categoryRepository.create(name: categoryName.trim());
 
       // Reload categories in the categories selector
       await _loadCategories();
@@ -372,7 +372,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     try {
       // Changed: Used _noteRepository
-      await _noteRepository.deleteNote(_note!.id!);
+      await _noteRepository.delete(_note!.id!);
       await _deleteNoteInRemoteDatabase();
 
       logger.d('Note deleted successfully with ID: ${_note!.id}');
@@ -402,11 +402,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     try {
       // Changed: Used _noteRepository
-      final savedNoteId = await _noteRepository.createNote(_note!);
+      final Note createdNote = await _noteRepository.create(
+        title: _note!.title,
+        content: _note!.content!,
+        categoryId: _note!.categoryId,
+        remoteId: _note!.remoteId
+      );
       setState(() {
-        _note = _note!.copyWith(id: savedNoteId);
+        _note = _note!.copyWith(id: createdNote.id);
       });
-      logger.d('New note saved with ID: $savedNoteId');
+      logger.d('New note saved with ID: ${createdNote.id}');
     } catch (e) {
       logger.e('Error creating note in local database: $e');
       rethrow;
@@ -420,7 +425,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     try {
       // Changed: Used _noteRepository
-      await _noteRepository.updateNote(_note!);
+      await _noteRepository.update(_note!.id!,
+          title: _note!.title,
+          content: _note!.content!,
+          categoryId: _note!.categoryId,
+          remoteId: _note!.remoteId,
+          updatedAt: DateTime.now().toUtc().toIso8601String()
+      );
       logger.d('Note updated with ID: ${_note!.id}');
     } catch (e) {
       logger.e('Error updating note in local database: $e');
@@ -435,7 +446,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       }
 
       // Changed: Used _noteRepository
-      final existingNote = await _noteRepository.getNoteById(_note!.id!);
+      final existingNote = await _noteRepository.getById(_note!.id!);
 
       if (existingNote != null) {
         return existingNote.createdAt!;
@@ -450,7 +461,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   Future<void> _updateCategoryRemoteIdInLocalDatabase(Category category) async {
     try {
-      await _categoryRepository.updateCategory(
+      await _categoryRepository.update(
           category.id!,
           name: category.name,
           remoteId: category.remoteId
@@ -477,7 +488,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       final notePayload = _note!.toJson();
 
       if (_note?.categoryId != null) {
-        final Category? category = await _categoryRepository.getCategoryById(_note!.categoryId!);
+        final Category? category = await _categoryRepository.getById(_note!.categoryId!);
         if (category != null && category.remoteId != null) {
           notePayload['remote_category_id'] = category.remoteId;
         }
