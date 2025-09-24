@@ -53,6 +53,7 @@ dependencies:
   flutter_dotenv: ^6.0.0
   connectivity_plus: ^6.1.5
   dio: ^5.9.0
+  sentry_flutter: ^9.6.0
 
 dev_dependencies:
   flutter_test:

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:notelance/config.dart';
 import 'package:provider/provider.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
@@ -74,7 +74,11 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
   Future<void> _editCategory(Category category, String newName) async {
     try {
-      await _categoryLocalRepository.update(category.id!, name: newName);
+      await _categoryLocalRepository.update(
+          category.id!,
+          name: newName,
+          updatedAt: DateTime.now().toUtc().toIso8601String()
+      );
 
       if (category.remoteId != null) {
         await _updateCategoryRemote(remoteId: category.remoteId!, name: newName);
@@ -144,7 +148,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
     try {
       final response = await Supabase.instance.client.functions.invoke(
-        '${dotenv.env['SUPABASE_FUNCTION_NAME']!}/categories',
+        '${Config.instance.supabaseFunctionName}/categories',
         method: HttpMethod.post,
         body: category.toJson(),
       );
@@ -169,7 +173,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
     if (!await _hasInternetConnection()) return;
     try {
       await Supabase.instance.client.functions.invoke(
-        '${dotenv.env['SUPABASE_FUNCTION_NAME']!}/categories/$remoteId',
+        '${Config.instance.supabaseFunctionName}/categories/$remoteId',
         method: HttpMethod.put,
         body: {'name': name},
       );
@@ -182,7 +186,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
     if (!await _hasInternetConnection()) return;
     try {
       await Supabase.instance.client.functions.invoke(
-        '${dotenv.env['SUPABASE_FUNCTION_NAME']!}/categories/$remoteId',
+        '${Config.instance.supabaseFunctionName}/categories/$remoteId',
         method: HttpMethod.delete,
       );
     } catch (e) {
@@ -211,7 +215,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
       builder: (_) => AlertDialog(
         title: const Text('Hapus Kategori', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         content: Text('Kategori "$name" memiliki $notesCount catatan. '
-            'Menghapus kategori akan menghapus semua catatan di dalamnya. Apakah Anda yakin?'),
+            'Menghapus kategori akan membuat catatan tersebut menjadi catatan umum. Apakah Anda yakin?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
           TextButton(

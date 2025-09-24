@@ -10,12 +10,14 @@ import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
 import 'package:logger/logger.dart';
 import 'package:notelance/categories_dialog.dart';
+import 'package:notelance/config.dart';
 import 'package:notelance/delete_note_dialog.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
 import 'package:notelance/repositories/note_local_repository.dart'; // Added
+import 'package:notelance/responses/note_editor_response.dart'; // Added
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -495,17 +497,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       }
 
       final FunctionResponse response = await Supabase.instance.client.functions.invoke(
-        '${dotenv.env['SUPABASE_FUNCTION_NAME']!}/notes',
+        '${Config.instance.supabaseFunctionName}/notes',
         method: HttpMethod.post,
         body: notePayload,
       );
 
       if (response.data['message'] == 'NOTE_IS_SUCCESSFULLY_SYNCED') {
-        final int noteRemoteId = response.data['remote_id'];
+        final SaveNoteSuccessResponse successResponse = SaveNoteSuccessResponse.fromJson(response.data);
+        final int noteRemoteId = successResponse.remoteId;
 
-        setState(() {
-          _note = _note!.copyWith(remoteId: noteRemoteId);
-        });
+        setState(() => _note = _note!.copyWith(remoteId: noteRemoteId));
 
         // Update the remote ID in local database
         await _updateNoteInLocalDatabase();

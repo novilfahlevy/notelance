@@ -1,4 +1,5 @@
 import 'dart:isolate';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
 import 'package:dio/dio.dart';
@@ -17,6 +18,8 @@ class SynchronizationIsolateMessage {
   final SendPort sendPort;
   final RootIsolateToken rootIsolateToken;
   final String databasePath;
+  final String? sentryDsn;
+  final bool isSentryEnabled;
 
   SynchronizationIsolateMessage({
     required this.supabaseFunctionUrl,
@@ -24,20 +27,32 @@ class SynchronizationIsolateMessage {
     required this.sendPort,
     required this.rootIsolateToken,
     required this.databasePath,
+    this.sentryDsn,
+    this.isSentryEnabled = false
   });
 }
 
 void isolateEntry(SynchronizationIsolateMessage message) async {
   try {
-    BackgroundIsolateBinaryMessenger.ensureInitialized(
-        message.rootIsolateToken);
+    BackgroundIsolateBinaryMessenger.ensureInitialized(message.rootIsolateToken);
 
     /// Re-initialize SQFLite
     await LocalDatabaseService.instance.initialize(
         successMessage: 'Database successfully initialized in the synchronization worker.'
     );
 
+    final bool isSentryEnabled = message.isSentryEnabled && message.sentryDsn != null;
+    if (isSentryEnabled) {
+      await Sentry.init(
+        (options) {
+          options.dsn = message.sentryDsn;
+          options.sendDefaultPii = true;
+        }
+      );
+    }
+
     /// Run synchronization
+    Synchronization.isSentryEnabled = isSentryEnabled;
     Synchronization.supabaseFunctionUrl = message.supabaseFunctionUrl;
     Synchronization.supabaseServiceRoleKey = message.supabaseServiceRoleKey;
     final result = await Synchronization.run();
@@ -56,9 +71,7 @@ void isolateEntry(SynchronizationIsolateMessage message) async {
       'error': error.toString()
     });
   } finally {
-    Isolate.exit();
-
-    /// Close the Isolate
+    Isolate.exit(); /// Close the Isolate
   }
 }
 
@@ -68,7 +81,17 @@ class Synchronization {
 
   static late final String supabaseFunctionUrl;
   static late final String supabaseServiceRoleKey;
+
   static final Dio _httpClient = Dio();
+  static Options get _httpOptions =>
+      Options(
+        headers: {
+          'Authorization': 'Bearer $supabaseServiceRoleKey',
+          'Content-Type': 'application/json',
+        },
+      );
+
+  static bool isSentryEnabled = false; // The default is false
 
   static Future<void> _synchronizeLocalCategoriesWithRemote() async {
     try {
@@ -79,10 +102,10 @@ class Synchronization {
       final List<Map<String, dynamic>> categoriesPayload = localCategories
           .map((category) {
             return {
-              'id': category.id.toString(),
+              'client_id': category.id,
+              'remote_id': category.remoteId,
               'name': category.name,
               'order_index': category.orderIndex,
-              'remote_id': category.remoteId?.toString() ?? '',
               'is_deleted': category.isDeleted,
               'created_at': category.createdAt,
               'updated_at': category.updatedAt,
@@ -94,12 +117,7 @@ class Synchronization {
       final Response httpResponse = await _httpClient.post(
         '$supabaseFunctionUrl/categories/sync',
         data: { 'categories': categoriesPayload },
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $supabaseServiceRoleKey',
-            'Content-Type': 'application/json',
-          },
-        ),
+        options: _httpOptions,
       );
       final response = CategoriesSyncResponse.fromJson(httpResponse.data);
 
@@ -108,20 +126,21 @@ class Synchronization {
 
         for (final categoryResponse in categoryResponses) {
           final Map<String, dynamic> responseData = categoryResponse as Map<String, dynamic>;
-          final String localCategoryId = responseData['id'];
+          final int localCategoryId = responseData['client_id'];
           final Category localCategory = localCategories.firstWhere(
-                (cat) => cat.id.toString() == localCategoryId,
+                (cat) => cat.id == localCategoryId,
                 orElse: () => throw Exception('Local category not found'),
           );
           await _handleCategoryResponse(localCategory, responseData);
         }
       } else if (response.state == 'CATEGORIES_SYNC_IS_FAILED') {
-        throw Exception('Categories sync failed: ${response.errorMessage}');
+        throw Exception('Local categories sync failed: ${response.errorMessage}');
       } else {
         throw Exception('Unexpected response state: ${response.state}');
       }
-    } catch (error) {
-      logger.e('Error synchronizing categories: $error');
+    } catch (exception, stackTrace) {
+      logger.e('Exception synchronizing local categories: $exception');
+      if (isSentryEnabled) await Sentry.captureException(exception, stackTrace: stackTrace);
       rethrow;
     }
   }
@@ -130,7 +149,7 @@ class Synchronization {
     try {
       switch (responseData['state']) {
         case 'CATEGORY_ID_IS_NOT_PROVIDED':
-          // Category was created on server, update local with remote_id
+          // Category was created on remote, update local with remote_id
           final categoryResponse = RemoteCategoryIdIsNotFoundResponse.fromJson(responseData);
           if (categoryResponse.remoteId != null) {
             await _categoryLocalRepository.update(
@@ -139,12 +158,12 @@ class Synchronization {
             );
             logger.i('Updated local category ${localCategory.name} with remote_id: ${categoryResponse.remoteId}');
           } else {
-            logger.e('Failed to create category ${localCategory.name} on server: ${categoryResponse.message}');
+            logger.e('Failed to create category ${localCategory.name} on remote: ${categoryResponse.message}');
           }
         break;
 
         case 'CATEGORY_IN_THE_REMOTE_IS_NEWER':
-          // Update local category with server data
+          // Update local category with remote data
           final categoryResponse = RemoteCategoryIsNewerResponse.fromJson(responseData);
           await _categoryLocalRepository.update(
             localCategory.id!,
@@ -152,15 +171,15 @@ class Synchronization {
             orderIndex: categoryResponse.orderIndex,
             updatedAt: categoryResponse.updatedAt
           );
-          logger.i('Updated local category ${localCategory.name} with newer server data');
+          logger.i('Updated local category ${localCategory.name} with newer remote data');
         break;
 
         case 'CATEGORY_IN_THE_REMOTE_IS_DEPRECATED':
           final categoryResponse = RemoteCategoryIsDeprecatedResponse.fromJson(responseData);
           if (categoryResponse.message != null && categoryResponse.message!.contains('updated')) {
-            logger.i('Successfully updated server category for ${localCategory.name}');
+            logger.i('Successfully updated remote category for ${localCategory.name}');
           } else {
-            logger.e('Failed to update server category for ${localCategory.name}.');
+            logger.e('Failed to update remote category for ${localCategory.name}.');
           }
         break;
 
@@ -170,12 +189,12 @@ class Synchronization {
         break;
 
         case 'AN_ERROR_OCCURED_IN_THIS_CATEGORY':
-          final categoryResponse = ErrorIsOccuredResponse.fromJson(responseData);
+          final categoryResponse = ErrorIsOccurredCategoryResponse.fromJson(responseData);
           logger.e('Error occurred for category ${localCategory.name}: ${categoryResponse.errorMessage}');
         break;
 
         case 'CATEGORY_IS_NOT_FOUND_IN_THE_REMOTE':
-          logger.i('Category ${localCategory.name} not found on server - it may have been deleted remotely');
+          logger.i('Category ${localCategory.name} is not found on remote, it may have been deleted remotely.');
         break;
 
         case 'CATEGORY_IN_THE_REMOTE_IS_THE_SAME':
@@ -185,8 +204,9 @@ class Synchronization {
         default:
           logger.w('Unknown sync state for category ${localCategory.name}: ${responseData['state']}');
       }
-    } catch (error) {
-      logger.e('Error handling note response for ${localCategory.name}: $error');
+    } catch (exception, stackTrace) {
+      logger.e('Failed handling remote categories response for ${localCategory.name}: $exception');
+      if (isSentryEnabled) await Sentry.captureException(exception, stackTrace: stackTrace);
     }
   }
 
@@ -194,12 +214,7 @@ class Synchronization {
     try {
       final Response response = await _httpClient.get(
         '$supabaseFunctionUrl/categories',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $supabaseServiceRoleKey',
-            'Content-Type': 'application/json',
-          },
-        ),
+        options: _httpOptions,
       );
 
       if (response.data['message'] == 'CATEGORIES_IS_FETCHED_SUCCESSFULLY') {
@@ -216,12 +231,13 @@ class Synchronization {
               orderIndex: remoteCategoryData['order_index'],
               remoteId: remoteId,
             );
-            logger.i('Created new local category from server: ${remoteCategoryData['name']}');
+            logger.i('Created new local category from remote: ${remoteCategoryData['name']}');
           }
         }
       }
-    } catch (error) {
-      logger.e('Error fetching new categories from server: $error');
+    } catch (exception, stackTrace) {
+      logger.e('Failed fetching new categories from remote: $exception');
+      if (isSentryEnabled) await Sentry.captureException(exception, stackTrace: stackTrace);
       // Don't rethrow here as this is a supplementary operation
     }
   }
@@ -234,14 +250,14 @@ class Synchronization {
       // Prepare notes data for sync endpoint
       final List<Map<String, dynamic>> notesPayload = localNotes.map((note) {
         return {
-          'id': note.id.toString(),
-          'remote_id': note.remoteId?.toString() ?? '',
+          'client_id': note.id,
+          'remote_id': note.remoteId,
           'title': note.title,
-          'content': note.content ?? '',
-          'category_id': note.categoryId?.toString() ?? '',
+          'content': note.content,
+          'category_id': note.categoryId,
           'is_deleted': note.isDeleted,
-          'updated_at': _ensureUTCFormat(note.updatedAt ?? note.createdAt ?? DateTime.now().toIso8601String()),
-          'created_at': _ensureUTCFormat(note.createdAt ?? DateTime.now().toIso8601String()),
+          'created_at': _ensureUTCFormat(note.createdAt!),
+          'updated_at': _ensureUTCFormat(note.updatedAt!),
         };
       }).toList();
 
@@ -249,22 +265,17 @@ class Synchronization {
       final Response response = await _httpClient.post(
         '$supabaseFunctionUrl/notes/sync',
         data: { 'notes': notesPayload },
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $supabaseServiceRoleKey',
-            'Content-Type': 'application/json',
-          },
-        ),
+        options: _httpOptions,
       );
 
       if (response.data['state'] == 'NOTES_HAVE_SYNCED') {
-        final List<dynamic> noteResponses = response.data['notes'] as List<dynamic>;
+        final NotesResponseSucceed successResponse = NotesResponseSucceed.fromJson(response.data);
 
-        for (final noteResponse in noteResponses) {
+        for (final noteResponse in successResponse.notes) {
           final Map<String, dynamic> noteData = noteResponse as Map<String, dynamic>;
-          final String localNoteId = noteData['id'];
+          final int localNoteId = noteData['client_id'];
           final Note localNote = localNotes.firstWhere(
-                (localNote) => localNote.id.toString() == localNoteId,
+                (localNote) => localNote.id == localNoteId,
                 orElse: () => throw Exception('Local note not found'),
           );
           await _handleNoteResponse(localNote, noteData);
@@ -274,9 +285,10 @@ class Synchronization {
       } else {
         throw Exception('Unexpected response state: ${response.data['state']}');
       }
-    } catch (error) {
-      logger.e('Error synchronizing notes: $error');
-      rethrow;
+    } catch (exception, stackTrace) {
+      logger.e('Failed synchronizing local notes: $exception');
+      if (isSentryEnabled) await Sentry.captureException(exception, stackTrace: stackTrace);
+      // Don't rethrow here as this is a supplementary operation
     }
   }
 
@@ -284,144 +296,145 @@ class Synchronization {
     try {
       switch (responseData['state']) {
         case 'NOTE_ID_IS_NOT_PROVIDED':
-          // Note was created on server, update local with remote_id
-          if (responseData['remoteId'] != null) {
+          final RemoteNoteIdIsNotProvidedResponse response = RemoteNoteIdIsNotProvidedResponse.fromJson(responseData);
+
+          // Note was created on remote, update local with remote_id
+          if (response.remoteId != null) {
             await _noteLocalRepository.update(localNote.id!,
-              remoteId: int.parse(responseData['remoteId'].toString()),
+              remoteId: response.remoteId,
               updatedAt: localNote.updatedAt!
             );
-            logger.i('Updated local note ${localNote.title} with remote_id: ${responseData['remoteId']}');
+            logger.i('Updated local note ${localNote.title} with remote_id: ${response.remoteId}');
           } else {
-            logger.e('Failed to create note ${localNote.title} on server: ${responseData['message']}');
+            logger.e('Failed to create note ${localNote.title} on remote: ${response.message}');
           }
         break;
 
         case 'NOTE_IN_THE_REMOTE_IS_NEWER':
+          final RemoteNoteIsNewerResponse response = RemoteNoteIsNewerResponse.fromJson(responseData);
           int? categoryId;
 
           // Handle category update
-          final String? remoteCategoryId = responseData['category_id']?.toString();
-          if (remoteCategoryId != null && remoteCategoryId.isNotEmpty) {
-            final Category? localCategory = await _categoryLocalRepository.getByRemoteId(int.parse(remoteCategoryId));
-            if (localCategory != null) {
-              categoryId = localCategory.id;
-            }
+          final int? remoteCategoryId = response.categoryId;
+          if (remoteCategoryId != null) {
+            final Category? localCategory = await _categoryLocalRepository.getByRemoteId(remoteCategoryId);
+            if (localCategory != null) categoryId = localCategory.id;
           }
 
           await _noteLocalRepository.update(localNote.id!,
-            title: responseData['title'],
-            content: responseData['content'],
+            title: response.title,
+            content: response.content,
             categoryId: categoryId,
-            remoteId: responseData['remote_id'],
-            isDeleted: responseData['is_deleted'],
-            updatedAt: responseData['updated_at'],
+            remoteId: response.remoteId,
+            isDeleted: response.isDeleted,
+            updatedAt: response.updatedAt,
           );
 
-          logger.i('Updated local note ${localNote.title} with newer server data');
+          logger.i('Updated local note ${localNote.title} with newer remote data');
         break;
 
         case 'NOTE_IN_THE_REMOTE_IS_DEPRECATED':
-          if (responseData['message'] != null && responseData['message'].contains('updated')) {
-            logger.i('Successfully updated server note for ${localNote.title}');
+          final RemoteNoteIsDeprecatedResponse response = RemoteNoteIsDeprecatedResponse.fromJson(responseData);
+          if (response.message != null && response.message!.contains('updated')) {
+            logger.i('Successfully updated remote note for ${localNote.title}');
           } else {
-            logger.e('Failed to update server note for ${localNote.title}: ${responseData['message']}');
+            logger.e('Failed to update remote note for ${localNote.title}: ${response.message}');
           }
         break;
 
         case 'NOTE_ID_IS_NOT_VALID':
-          logger.e('Invalid remote_id for note ${localNote.title}: ${responseData['remote_id']}');
+          final RemoteNoteIdIsNotValidResponse response = RemoteNoteIdIsNotValidResponse.fromJson(responseData);
+          logger.e('Invalid remote_id for note ${localNote.title}: ${response.remoteId}');
         break;
 
-        case 'AN_ERROR_OCCURED_IN_THIS_NOTE':
-          logger.e('Error occurred for note ${localNote.title}: ${responseData['errorMessage']}');
+        case 'AN_ERROR_OCCURRED_IN_THIS_NOTE':
+          final ErrorIsOccurredNoteResponse response = ErrorIsOccurredNoteResponse.fromJson(responseData);
+          logger.e('Error occurred for note ${localNote.title}: ${response.errorMessage}');
         break;
 
         case 'NOTE_IS_NOT_FOUND_IN_THE_REMOTE':
-          logger.i('Note ${localNote.title} not found on server - it may have been deleted remotely');
-          // If the note was marked for deletion locally and doesn't exist on server, hard delete it
-          if (localNote.isDeleted == 1) {
-            await _noteLocalRepository.delete(localNote.id!);
-            logger.i('Hard deleted local note ${localNote.title} as it was not found on server');
-          }
+          final NoteIsNotFoundInRemoteResponse response = NoteIsNotFoundInRemoteResponse.fromJson(responseData);
+          await _noteLocalRepository.delete(response.clientId);
+          logger.i('Note ${response.title} not found on remote, it may have been deleted remotely. So it has deleted too in locally.');
         break;
 
         case 'NOTE_IN_THE_REMOTE_IS_THE_SAME':
-          logger.d('Note ${localNote.title} is in sync');
-          // If note was marked for deletion and successfully synced, soft-delete it
-          if (localNote.isDeleted == 1) {
-            await _noteLocalRepository.delete(localNote.id!);
-            logger.i('Hard deleted synced note ${localNote.title}');
-          }
+          final NotesHaveSameTimesResponse response = NotesHaveSameTimesResponse.fromJson(responseData);
+          logger.i('Note with Local ID: ${response.clientId} and Remote ID: ${response.remoteId} is still the same.');
         break;
 
         default:
           logger.w('Unknown sync state for note ${localNote.title}: ${responseData['state']}');
       }
-    } catch (error) {
-      logger.e('Error handling note response for ${localNote.title}: $error');
+    } catch (exception, stackTrace) {
+      logger.e('Failed handling note response for ${localNote.title}: $exception');
+      if (isSentryEnabled) await Sentry.captureException(exception, stackTrace: stackTrace);
+      // Don't rethrow here as this is a supplementary operation
     }
   }
 
   static Future<void> _fetchNewNotesFromRemote() async {
     try {
-      final Response response = await _httpClient.get(
-        '$supabaseFunctionUrl/notes',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $supabaseServiceRoleKey',
-            'Content-Type': 'application/json',
-          },
-        ),
-      );
+      String url = '$supabaseFunctionUrl/notes';
+
+      final List<Note> notesWithRemoteId = await _noteLocalRepository.getWithRemoteId();
+      final List<int> remoteIds = notesWithRemoteId.map((Note note) => note.remoteId!).toList();
+
+      if (remoteIds.isNotEmpty) {
+        url += '?excepts=${remoteIds.join(',')}';
+      }
+
+      final Response response = await _httpClient.get(url, options: _httpOptions);
 
       if (response.statusCode == 200) {
         final List<dynamic> allRemoteNotesData = response.data['notes'] as List<dynamic>;
 
         for (final remoteNoteRaw in allRemoteNotesData) {
-          final remoteNoteData = remoteNoteRaw as Map<String, dynamic>;
-          final int currentRemoteNoteId = remoteNoteData['remote_id'] as int;
+          final FetchNoteResponse remoteNoteData = FetchNoteResponse.fromJson(remoteNoteRaw);
+          final int currentRemoteNoteId = remoteNoteData.remoteId;
 
           // Check if a local note with this remote_id exists
           if (await _noteLocalRepository.checkNoteIsNotExistedByRemoteId(currentRemoteNoteId)) {
-            // Parse timestamps from server
-            final String createdAtStringFromServer = remoteNoteData['created_at'] as String;
-            final String updatedAtStringFromServer = remoteNoteData['updated_at'] as String;
+            // Parse timestamps from remote
+            final String createdAtStringFromRemote = remoteNoteData.createdAt;
+            final String updatedAtStringFromRemote = remoteNoteData.updatedAt;
 
-            final DateTime createdAtUtc = DateTime.parse(createdAtStringFromServer);
-            final DateTime updatedAtUtc = DateTime.parse(updatedAtStringFromServer);
+            final DateTime createdAtUtc = DateTime.parse(createdAtStringFromRemote);
+            final DateTime updatedAtUtc = DateTime.parse(updatedAtStringFromRemote);
 
             int? categoryId;
 
             // Attach the category to the note
-            final int? remoteCategoryId = remoteNoteData['remote_category_id'];
+            final int? remoteCategoryId = remoteNoteData.remoteCategoryId;
             if (remoteCategoryId != null) {
               Category? localCategory = await _categoryLocalRepository.getByRemoteId(remoteCategoryId);
               localCategory ??= await _categoryLocalRepository.create(
-                  name: remoteNoteData['remote_category_name'],
+                  name: remoteNoteData.remoteCategoryName!,
                   remoteId: remoteCategoryId,
-                  orderIndex: remoteNoteData['remote_category_order_index']
+                  orderIndex: remoteNoteData.remoteCategoryOrderIndex
               );
               categoryId = localCategory.id;
             }
 
             // Insert the remote note to the local database
             await _noteLocalRepository.create(
-                title: remoteNoteData['title'],
-                content: remoteNoteData['content'],
+                title: remoteNoteData.title,
+                content: remoteNoteData.content,
                 categoryId: categoryId,
                 remoteId: currentRemoteNoteId,
                 createdAt: createdAtUtc.toIso8601String(),
                 updatedAt: updatedAtUtc.toIso8601String(),
-                isDeleted: remoteNoteData['is_deleted'],
+                isDeleted: remoteNoteData.isDeleted,
             );
-            logger.i('Created new local note from server: ${remoteNoteData['title']}');
+            logger.i('Created new local note from remote: ${remoteNoteData.title}');
           }
         }
       } else {
         logger.e("Failed to fetch remote notes. Status: ${response.statusCode}, Data: ${response.data}");
       }
-    } catch (error) {
-      logger.e("Error fetching new remote notes: $error");
+    } catch (exception, stackTrace) {
+      logger.e("Failed fetching new remote notes: $exception");
+      if (isSentryEnabled) await Sentry.captureException(exception, stackTrace: stackTrace);
       // Don't rethrow here as this is a supplementary operation
     }
   }
@@ -435,8 +448,8 @@ class Synchronization {
       } else {
         return dateTime.toUtc().toIso8601String();
       }
-    } catch (error) {
-      logger.e('Error parsing timestamp: $timestamp, error: $error');
+    } catch (exception) {
+      logger.e('Failed parsing timestamp: $timestamp, exception: $exception');
       // Return current UTC time as fallback
       return DateTime.now().toUtc().toIso8601String();
     }
@@ -454,9 +467,10 @@ class Synchronization {
         'notesSync': 'success',
         'timestamp': DateTime.now().toUtc().toIso8601String()
       };
-    } catch (error) {
+    } catch (exception, stackTrace) {
+      if (isSentryEnabled) await Sentry.captureException(exception, stackTrace: stackTrace);
       return {
-        'error': error.toString(),
+        'error': exception.toString(),
         'timestamp': DateTime.now().toUtc().toIso8601String()
       };
     }

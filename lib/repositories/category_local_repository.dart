@@ -204,7 +204,7 @@ class CategoryLocalRepository {
         if (category.id != null) {
           batch.update(
             'Categories',
-            {'order_index': i},
+            { 'order_index': i, 'updated_at': DateTime.now().toUtc().toIso8601String() },
             where: 'id = ?',
             whereArgs: [category.id],
           );
@@ -225,10 +225,12 @@ class CategoryLocalRepository {
     if (database == null) throw Exception('Database not initialized');
 
     try {
-      // First delete all notes in this category
+      final now = DateTime.now().toUtc().toIso8601String();
+
+      // First, detach the category from its notes
       await database.update(
         'Notes',
-        { 'is_deleted': 1 },
+        { 'category_id': null, 'updated_at': now },
         where: 'category_id = ?',
         whereArgs: [categoryId],
       );
@@ -236,7 +238,7 @@ class CategoryLocalRepository {
       // Then delete the category
       final deletedRows = await database.update(
         'Categories',
-        { 'is_deleted': 1 },
+        { 'is_deleted': 1, 'updated_at': now },
         where: 'id = ?',
         whereArgs: [categoryId],
       );
@@ -257,9 +259,10 @@ class CategoryLocalRepository {
     if (database == null) throw Exception('Database not initialized');
 
     try {
-      // First delete all notes in this category
-      await database.delete(
+      // First, detach the category from its notes
+      await database.update(
         'Notes',
+        { 'category_id': null, 'updated_at': DateTime.now().toUtc().toIso8601String() },
         where: 'category_id = ?',
         whereArgs: [id],
       );

@@ -5,6 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:notelance/config.dart';
 import 'package:notelance/synchronization.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
 import 'package:notelance/search_page.dart';
@@ -19,23 +20,35 @@ import 'package:notelance/note_editor_page.dart';
 import 'package:notelance/notes_page.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 var logger = Logger();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await dotenv.load(fileName: ".env");
+  await Config.load();
 
   await LocalDatabaseService.instance.initialize();
 
   await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    url: Config.instance.supabaseUrl,
+    anonKey: Config.instance.supabaseAnonKey,
   );
 
-  runApp(const NotelanceApp());
+  if (Config.instance.isSentryEnabled) {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = Config.instance.sentryDsn;
+        options.sendDefaultPii = true;
+      },
+      appRunner: () => runApp(
+        SentryWidget(child: const NotelanceApp()),
+      ),
+    );
+  } else {
+    runApp(const NotelanceApp());
+  }
 }
 
 class NotelanceApp extends StatelessWidget {
@@ -160,11 +173,13 @@ class _NotelanceState extends State<Notelance> {
         await Isolate.spawn<SynchronizationIsolateMessage>(
             isolateEntry,
             SynchronizationIsolateMessage(
-                supabaseFunctionUrl: dotenv.env['SUPABASE_FUNCTION_URL']!,
-                supabaseServiceRoleKey: dotenv.env['SUPABASE_SERVICE_ROLE_KEY']!,
+                supabaseFunctionUrl: Config.instance.supabaseFunctionUrl,
+                supabaseServiceRoleKey: Config.instance.supabaseServiceRoleKey,
                 sendPort: receivePort.sendPort,
                 rootIsolateToken: RootIsolateToken.instance!,
-                databasePath: databasePath
+                databasePath: databasePath,
+                isSentryEnabled: Config.instance.isSentryEnabled,
+                sentryDsn: Config.instance.sentryDsn
             )
         );
 
