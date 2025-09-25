@@ -59,9 +59,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
     try {
       final category = await _categoryLocalRepository.create(name: name);
 
-      final remoteId = await _storeCategoryRemote(category);
-      if (remoteId != null) category.remoteId = remoteId;
-
       setState(() => _categories..add(category)..sort((a, b) => a.orderIndex.compareTo(b.orderIndex)));
       if (mounted) context.read<CategoriesNotifier>().reloadCategories();
 
@@ -79,10 +76,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
           name: newName,
           updatedAt: DateTime.now().toUtc().toIso8601String()
       );
-
-      if (category.remoteId != null) {
-        await _updateCategoryRemote(remoteId: category.remoteId!, name: newName);
-      }
 
       setState(() {
         final idx = _categories.indexWhere((c) => c.id == category.id);
@@ -106,7 +99,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
       }
 
       await _categoryLocalRepository.delete(category.id!);
-      if (category.remoteId != null) await _deleteCategoryRemote(category.remoteId!);
 
       setState(() => _categories.removeWhere((c) => c.id == category.id));
       if (mounted) context.read<CategoriesNotifier>().reloadCategories();
@@ -136,61 +128,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
     } catch (e) {
       logger.e('Error reordering categories: $e');
       if (mounted) _showSnackBar('Gagal mengubah urutan kategori: $e', Theme.of(context).colorScheme.error);
-    }
-  }
-
-  /// ----------------------
-  /// Remote Operations
-  /// ----------------------
-
-  Future<int?> _storeCategoryRemote(Category category) async {
-    if (!await _hasInternetConnection()) return null;
-
-    try {
-      final response = await Supabase.instance.client.functions.invoke(
-        '${Config.instance.supabaseFunctionName}/categories',
-        method: HttpMethod.post,
-        body: category.toJson(),
-      );
-
-      final message = response.data['message'];
-      if (['CATEGORY_IS_CREATED_SUCCESSFULLY', 'CATEGORY_IS_EXISTED'].contains(message)) {
-        final remoteId = response.data['remote_id'];
-        await _categoryLocalRepository.update(
-          category.id!,
-          remoteId: remoteId,
-          updatedAt: response.data['updated_at']
-        );
-        return remoteId;
-      }
-    } catch (e) {
-      logger.e('Error storing category remotely: $e');
-    }
-    return null;
-  }
-
-  Future<void> _updateCategoryRemote({required int remoteId, required String name}) async {
-    if (!await _hasInternetConnection()) return;
-    try {
-      await Supabase.instance.client.functions.invoke(
-        '${Config.instance.supabaseFunctionName}/categories/$remoteId',
-        method: HttpMethod.put,
-        body: {'name': name},
-      );
-    } catch (e) {
-      logger.e('Error updating category remotely: $e');
-    }
-  }
-
-  Future<void> _deleteCategoryRemote(int remoteId) async {
-    if (!await _hasInternetConnection()) return;
-    try {
-      await Supabase.instance.client.functions.invoke(
-        '${Config.instance.supabaseFunctionName}/categories/$remoteId',
-        method: HttpMethod.delete,
-      );
-    } catch (e) {
-      logger.e('Error deleting category remotely: $e');
     }
   }
 
