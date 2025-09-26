@@ -140,6 +140,9 @@ class _NotelanceState extends State<Notelance> {
   /// The status of the sync operation
   bool? _isSyncSuccess;
 
+  final TextEditingController _searchController = TextEditingController();
+  List<Category> _categories = [];
+
   /// This key is used to uniquely identify NotesPage widgets.
   /// So if this key is changed, those notes pages would be re-rendered.
   late String _randomKey;
@@ -153,9 +156,15 @@ class _NotelanceState extends State<Notelance> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    context.watch<CategoriesNotifier>();
+
+    final categoriesNotifier = context.watch<CategoriesNotifier>();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadCategories();
+      if (categoriesNotifier.shouldReloadCategories) {
+        _loadCategories();
+        categoriesNotifier.shouldReloadCategories = false;
+      }
+
       _spawnSynchronizationIsolate();
     });
   }
@@ -235,22 +244,15 @@ class _NotelanceState extends State<Notelance> {
     return false;
   }
 
-  final TextEditingController _searchController = TextEditingController();
-  List<Category> _categories = [];
-
   Future<void> _loadCategories() async {
     if (!_databaseService.isInitialized) return;
 
-    final categoriesNotifier = context.read<CategoriesNotifier>();
-
-    if (categoriesNotifier.shouldReloadCategories) {
-      try {
-        final categoryLocalRepository = CategoryLocalRepository();
-        final categories = await categoryLocalRepository.get();
-        setState(() => _categories = categories);
-      } catch (e) {
-        logger.e(e.toString());
-      }
+    try {
+      final categoryLocalRepository = CategoryLocalRepository();
+      final categories = await categoryLocalRepository.get();
+      setState(() => _categories = categories);
+    } catch (e) {
+      logger.e(e.toString());
     }
   }
 

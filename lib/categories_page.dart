@@ -2,13 +2,11 @@ import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:notelance/config.dart';
 import 'package:provider/provider.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
 import 'package:notelance/notifiers/categories_notifier.dart';
 import 'package:logger/logger.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 var logger = Logger();
@@ -60,7 +58,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
       final category = await _categoryLocalRepository.create(name: name);
 
       setState(() => _categories..add(category)..sort((a, b) => a.orderIndex.compareTo(b.orderIndex)));
-      if (mounted) context.read<CategoriesNotifier>().reloadCategories();
 
       _showSnackBar('Berhasil menambah kategori.', Colors.green);
     } catch (e) {
@@ -81,8 +78,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
         final idx = _categories.indexWhere((c) => c.id == category.id);
         if (idx != -1) _categories[idx] = _categories[idx].copyWith(name: newName);
       });
-
-      if (mounted) context.read<CategoriesNotifier>().reloadCategories();
       _showSnackBar('Berhasil mengedit kategori.', Colors.green);
     } catch (e) {
       logger.e('Error updating category: $e');
@@ -101,7 +96,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
       await _categoryLocalRepository.delete(category.id!);
 
       setState(() => _categories.removeWhere((c) => c.id == category.id));
-      if (mounted) context.read<CategoriesNotifier>().reloadCategories();
 
       _showSnackBar('Kategori berhasil dihapus.', Colors.green);
     } catch (e) {
@@ -123,7 +117,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
     try {
       await _categoryLocalRepository.renewOrders(_categories);
-      if (mounted) context.read<CategoriesNotifier>().reloadCategories();
       logger.i('Categories reordered successfully');
     } catch (e) {
       logger.e('Error reordering categories: $e');
@@ -229,54 +222,60 @@ class _CategoriesPageState extends State<CategoriesPage> {
         title: const Text('Kelola Kategori'),
         actions: [IconButton(icon: const Icon(Icons.add), onPressed: () => _showCategoryDialog())],
       ),
-      body: _categories.isEmpty
-          ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.folder_open, size: 64, color: subtleIconColor ?? theme.disabledColor),
-            const SizedBox(height: 16),
-            Text('Belum ada kategori',
-                style: TextStyle(fontSize: 18, color: subtleTextColor ?? theme.disabledColor)),
-            const SizedBox(height: 8),
-            Text('Tap tombol + untuk menambah kategori',
-                style: TextStyle(color: subtleTextColor ?? theme.disabledColor)),
-          ],
-        ),
-      )
-          : ReorderableListView.builder(
-        buildDefaultDragHandles: false,
-        padding: const EdgeInsets.only(bottom: 100),
-        onReorder: _reorderCategories,
-        itemCount: _categories.length,
-        itemBuilder: (_, i) {
-          final category = _categories[i];
-          return Card(
-            key: ValueKey(category.id),
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-              leading: ReorderableDragStartListener(
-                index: i,
-                child: Icon(Icons.drag_handle, color: theme.iconTheme.color?.withOpacity(0.6)),
-              ),
-              title: Text(category.name),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 18),
-                    onPressed: () => _showCategoryDialog(category: category),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                    onPressed: () => _deleteCategory(category),
-                  ),
-                ],
-              ),
-            ),
-          );
+      body: PopScope(
+        canPop: true,
+        onPopInvokedWithResult: (didPop, _) {
+          if (context.mounted && didPop) context.read<CategoriesNotifier>().reloadCategories();
         },
+        child: _categories.isEmpty
+            ? Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.folder_open, size: 64, color: subtleIconColor ?? theme.disabledColor),
+              const SizedBox(height: 16),
+              Text('Belum ada kategori',
+                  style: TextStyle(fontSize: 18, color: subtleTextColor ?? theme.disabledColor)),
+              const SizedBox(height: 8),
+              Text('Tap tombol + untuk menambah kategori',
+                  style: TextStyle(color: subtleTextColor ?? theme.disabledColor)),
+            ],
+          ),
+        )
+            : ReorderableListView.builder(
+          buildDefaultDragHandles: false,
+          padding: const EdgeInsets.only(bottom: 100),
+          onReorder: _reorderCategories,
+          itemCount: _categories.length,
+          itemBuilder: (_, i) {
+            final category = _categories[i];
+            return Card(
+              key: ValueKey(category.id),
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                leading: ReorderableDragStartListener(
+                  index: i,
+                  child: Icon(Icons.drag_handle, color: theme.iconTheme.color?.withOpacity(0.6)),
+                ),
+                title: Text(category.name),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit, size: 18),
+                      onPressed: () => _showCategoryDialog(category: category),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                      onPressed: () => _deleteCategory(category),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }

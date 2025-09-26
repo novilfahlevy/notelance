@@ -276,9 +276,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       // Reload categories in the categories selector
       await _loadCategories();
 
-      // Reload categories in the main page's appbar
-      if (mounted) context.read<CategoriesNotifier>().reloadCategories();
-
       logger.d('Category created with ID: ${newCategory.id}');
 
       return newCategory;
@@ -518,6 +515,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Future<void> _handleBackPressed() async {
     final shouldPop = await _askExitConfirmation();
     if (shouldPop && mounted) {
+      context.read<CategoriesNotifier>().reloadCategories();
       Navigator.of(context).pop();
     }
   }
@@ -563,7 +561,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
+      onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         await _handleBackPressed();
       },
