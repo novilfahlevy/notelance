@@ -37,6 +37,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   // Core properties
   Note? _note;
   bool _isInitialized = false;
+  bool _isSaved = false;
   final NoteLocalRepository _noteRepository = NoteLocalRepository(); // Changed
   final CategoryLocalRepository _categoryRepository = CategoryLocalRepository();
 
@@ -182,7 +183,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       final initialContentDeltaHashCode = _setInitialContent(note.content!);
 
       setState(() {
-        _initialTitle = note.title;
+        _initialTitle = note.title.trim();
         _initialContentDeltaHashCode = initialContentDeltaHashCode;
       });
     } catch (e) {
@@ -343,12 +344,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         await _updateNoteInLocalDatabase();
       }
 
-      // Update initial states
       setState(() {
+        /// Update initial states
         _initialTitle = title;
         _initialContentDeltaHashCode = delta.hashCode;
+
+        /// Reset
         _category = attachedCategory;
         _pendingNewCategoryName = '';
+
+        /// This note is assumed to saved some changes
+        _isSaved = true;
       });
 
       _showSuccessSnackBar(
@@ -492,17 +498,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(
-              'Tetap menulis',
-              style: TextStyle(color: theme.colorScheme.primary), // Use theme primary color
-            ),
-          ),
-          TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: Text(
               'Keluar',
               style: TextStyle(color: theme.colorScheme.error), // Use theme error color
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              'Tetap menulis',
+              style: TextStyle(color: theme.colorScheme.primary), // Use theme primary color
             ),
           ),
         ],
@@ -515,7 +521,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Future<void> _handleBackPressed() async {
     final shouldPop = await _askExitConfirmation();
     if (shouldPop && mounted) {
-      context.read<CategoriesNotifier>().reloadCategories();
+      if (_isSaved) context.read<CategoriesNotifier>().reloadCategories();
       Navigator.of(context).pop();
     }
   }
