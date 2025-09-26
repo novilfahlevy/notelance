@@ -169,6 +169,7 @@ class Synchronization {
             localCategory.id!,
             name: categoryResponse.name,
             orderIndex: categoryResponse.orderIndex,
+            isDeleted: categoryResponse.isDeleted,
             updatedAt: categoryResponse.updatedAt
           );
           logger.i('Updated local category ${localCategory.name} with newer remote data');
@@ -221,7 +222,7 @@ class Synchronization {
         final List<dynamic> remoteCategories = response.data['categories'] as List<dynamic>;
 
         for (final remoteCategoryData in remoteCategories) {
-          final int remoteId = remoteCategoryData['remote_id'] ?? remoteCategoryData['id'];
+          final int remoteId = remoteCategoryData['remote_id'];
           final Category? existingCategory = await _categoryLocalRepository.getByRemoteId(remoteId);
 
           if (existingCategory == null) {
@@ -254,12 +255,20 @@ class Synchronization {
           'remote_id': note.remoteId,
           'title': note.title,
           'content': note.content,
-          'category_id': note.categoryId,
+          'category_id': note.categoryId, /// This is still the local category id
           'is_deleted': note.isDeleted,
           'created_at': _ensureUTCFormat(note.createdAt!),
           'updated_at': _ensureUTCFormat(note.updatedAt!),
         };
       }).toList();
+
+      /// Change the category id to its remote id
+      for (int i = 0; i < notesPayload.length; i++) {
+        if (notesPayload[i]['category_id'] != null) {
+          final Category? localCategory = await _categoryLocalRepository.getById(notesPayload[i]['category_id']);
+          notesPayload[i]['category_id'] = localCategory?.remoteId;
+        }
+      }
 
       // Make sync request
       final Response response = await _httpClient.post(

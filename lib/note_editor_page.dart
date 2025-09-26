@@ -228,11 +228,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           _pendingNewCategoryName = categoryName!;
         });
       } else {
-        // Use existing category
-        setState(() {
-          _category = result.existingCategory;
-          _pendingNewCategoryName = '';
-        });
+        if (result.detachCategory) {
+          // Use existing category
+          setState(() {
+            _category = null;
+            _pendingNewCategoryName = '';
+          });
+        } else {
+          // Use existing category
+          setState(() {
+            _category = result.existingCategory;
+            _pendingNewCategoryName = '';
+          });
+        }
       }
     }
   }
@@ -272,9 +280,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       if (mounted) context.read<CategoriesNotifier>().reloadCategories();
 
       logger.d('Category created with ID: ${newCategory.id}');
-
-      // Then save the category in the remote database
-      await _saveCategoryInRemoteDatabase(newCategory);
 
       return newCategory;
     } catch (e) {
@@ -341,9 +346,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         await _updateNoteInLocalDatabase();
       }
 
-      // Save to remote database
-      await _saveNoteInRemoteDatabase();
-
       // Update initial states
       setState(() {
         _initialTitle = title;
@@ -375,7 +377,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     try {
       // Changed: Used _noteRepository
       await _noteRepository.delete(_note!.id!);
-      await _deleteNoteInRemoteDatabase();
 
       logger.d('Note deleted successfully with ID: ${_note!.id}');
       _showSuccessSnackBar('Catatan berhasil dihapus');
@@ -459,149 +460,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       logger.e('Error in _getCreatedAtOfExistingNote: $e');
       rethrow;
     }
-  }
-
-  Future<void> _updateCategoryRemoteIdInLocalDatabase(Category category) async {
-    try {
-      await _categoryRepository.update(
-          category.id!,
-          name: category.name,
-          remoteId: category.remoteId
-      );
-      logger.d('Category updated locally with ID: ${category.id}');
-    } catch (e) {
-      logger.e('Error in _updateCategoryRemoteIdInLocalDatabase method: $e');
-    }
-  }
-
-  // ===== REMOTE DATABASE METHODS =====
-  Future<void> _saveNoteInRemoteDatabase() async {
-    if (_note == null) {
-      logger.w("Cannot save note to remote database: Note is null");
-      return;
-    }
-
-    if (!(await _isDeviceConnectedToInternet())) {
-      logger.w("Can't save the note with id \"${_note!.id}\" to the remote database: No internet connection is available.");
-      return;
-    }
-
-    try {
-      final notePayload = _note!.toJson();
-
-      if (_note?.categoryId != null) {
-        final Category? category = await _categoryRepository.getById(_note!.categoryId!);
-        if (category != null && category.remoteId != null) {
-          notePayload['remote_category_id'] = category.remoteId;
-        }
-      }
-
-      final FunctionResponse response = await Supabase.instance.client.functions.invoke(
-        '${Config.instance.supabaseFunctionName}/notes',
-        method: HttpMethod.post,
-        body: notePayload,
-      );
-
-      if (response.data['message'] == 'NOTE_IS_SUCCESSFULLY_SYNCED') {
-        final SaveNoteSuccessResponse successResponse = SaveNoteSuccessResponse.fromJson(response.data);
-        final int noteRemoteId = successResponse.remoteId;
-
-        setState(() => _note = _note!.copyWith(remoteId: noteRemoteId));
-
-        // Update the remote ID in local database
-        await _updateNoteInLocalDatabase();
-      }
-    } on Exception catch (e) {
-      logger.e('Error saving note in remote database: $e');
-    }
-  }
-
-  Future<void> _deleteNoteInRemoteDatabase() async {
-    if (_note == null) {
-      _showErrorSnackBar('Catatan tidak ditemukan.');
-      return;
-    }
-
-    if (!(await _isDeviceConnectedToInternet())) {
-      logger.w("Can't delete the note \"${_note?.title ?? ''}\" in the remote database: No internet connection is available.");
-      return;
-    }
-
-    try {
-      final FunctionResponse response = await Supabase.instance.client.functions.invoke(
-          '${dotenv.env['SUPABASE_FUNCTION_NAME']!}/notes/${_note!.remoteId}',
-          method: HttpMethod.delete
-      );
-
-      if (response.data['message'] == 'CATEGORY_IS_DELETED_SUCCESSFULLY') {
-        if (mounted) {
-          Navigator.of(context).pop();
-        } else {
-          _showErrorSnackBar('Catatan tidak ditemukan.');
-        }
-      }
-    } on Exception catch (e) {
-      logger.e('Error in _deleteNoteInRemoteDatabase method: $e');
-    }
-  }
-
-  Future<void> _saveCategoryInRemoteDatabase(Category category) async {
-    if (!(await _isDeviceConnectedToInternet())) {
-      logger.w("Can't save the new category \"${category.name}\" to the remote database: No internet connection is available.");
-      return;
-    }
-
-    try {
-      final FunctionResponse response = await Supabase.instance.client.functions.invoke(
-        '${dotenv.env['SUPABASE_FUNCTION_NAME']!}/categories',
-        method: HttpMethod.post,
-        body: category.toJson(),
-      );
-
-      if (response.data['message'] == 'CATEGORY_IS_CREATED_SUCCESSFULLY') {
-        final int categoryRemoteId = response.data['remote_id'];
-
-        // Update the remote id of the note in local database
-        category.remoteId = categoryRemoteId;
-        await _updateCategoryRemoteIdInLocalDatabase(category);
-      }
-    } on Exception catch (e) {
-      logger.e('Error in _saveCategoryInRemoteDatabase method: $e');
-    }
-  }
-
-  // ===== UTILITY METHODS =====
-  Future<bool> _isDeviceConnectedToInternet() async {
-    // --- VERCEL ---
-    if (Platform.environment.containsKey('VERCEL')) {
-      return true;
-    }
-
-    // --- WEB ---
-    if (kIsWeb) {
-      return true; // Or use a JavaScript interop to check window.navigator.onLine
-    }
-
-    // --- MOBILE / DESKTOP ---
-    if (Platform.isAndroid || Platform.isIOS || Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
-      try {
-        final connectivityResult = await Connectivity().checkConnectivity();
-        if (connectivityResult.contains(ConnectivityResult.mobile) ||
-            connectivityResult.contains(ConnectivityResult.wifi) ||
-            connectivityResult.contains(ConnectivityResult.ethernet) ||
-            connectivityResult.contains(ConnectivityResult.vpn)) {
-          return true;
-        } else if (connectivityResult.contains(ConnectivityResult.none)) {
-          return false;
-        }
-        return false;
-      } catch (e) {
-        logger.e('Error checking connectivity: $e');
-        return false;
-      }
-    }
-    logger.e('Connectivity check not supported on this platform or assuming offline.');
-    return false;
   }
 
   // ===== UI HELPER METHODS =====

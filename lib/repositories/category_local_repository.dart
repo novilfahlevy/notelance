@@ -141,6 +141,7 @@ class CategoryLocalRepository {
         String? name,
         int? orderIndex,
         int? remoteId,
+        int? isDeleted,
         String? createdAt,
         String? updatedAt
       }
@@ -161,6 +162,10 @@ class CategoryLocalRepository {
 
       if (remoteId != null) {
         updateData['remote_id'] = remoteId;
+      }
+
+      if (isDeleted != null) {
+        updateData['is_deleted'] = isDeleted;
       }
 
       if (createdAt != null) {

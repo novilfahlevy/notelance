@@ -53,17 +53,17 @@ class Note {
     String? createdAt,
     String? updatedAt,
     int? remoteId,
-    int? isDeleted, // Added is_deleted to copyWith
+    int? isDeleted,
   }) {
     return Note(
       id: id ?? this.id,
       title: title ?? this.title,
       content: content ?? this.content,
-      categoryId: categoryId ?? this.categoryId,
+      categoryId: categoryId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       remoteId: remoteId ?? this.remoteId,
-      isDeleted: isDeleted ?? this.isDeleted, // Updated copyWith with new field
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 

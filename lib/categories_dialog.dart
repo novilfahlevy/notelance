@@ -3,6 +3,7 @@ import 'package:notelance/models/category.dart';
 
 class CategoriesDialog {
   static const Object _newCategorySentinel = Object();
+  static const String _detachCategorySentinel = "DETACH";
 
   static Future<CategoriesDialogResult?> show({
     required BuildContext context,
@@ -18,7 +19,8 @@ class CategoriesDialog {
     final Object? chosenCategory = await showDialog<Object>(
       context: context,
       builder: (context) {
-        Object? selectedRadioValue = selectedCategory;
+        Object? selectedRadioValue = selectedCategory ?? _detachCategorySentinel;
+
         // If there's an error, assume user was trying to create a new category.
         if (newCategoryNameInputError != null) {
           selectedRadioValue = _newCategorySentinel;
@@ -93,6 +95,18 @@ class CategoriesDialog {
                         newCategoryFocusNode.requestFocus();
                       },
                     ),
+                    RadioListTile<Object>(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Umum'),
+                      value: _detachCategorySentinel,
+                      groupValue: selectedRadioValue,
+                      onChanged: (value) {
+                        dialogSetState(() {
+                          selectedRadioValue = _detachCategorySentinel;
+                          newCategoryController.clear();
+                        });
+                      },
+                    ),
                     Flexible(
                       child: ListView.builder(
                         shrinkWrap: true,
@@ -157,6 +171,8 @@ class CategoriesDialog {
                      Navigator.of(context).pop(_newCategorySentinel);
                   } else if (selectedRadioValue is Category) {
                     Navigator.of(context).pop(selectedRadioValue as Category);
+                  } else if (selectedRadioValue == _detachCategorySentinel) {
+                    Navigator.of(context).pop(_detachCategorySentinel);
                   } else {
                     Navigator.of(context).pop(); // Nothing selected
                   }
@@ -180,6 +196,8 @@ class CategoriesDialog {
       // The validation for non-empty is already here,
       // the duplicate check happens in note_editor_page before calling show again.
       return CategoriesDialogResult.newCategory(newCategoryText);
+    } else if (chosenCategory == _detachCategorySentinel) {
+      return CategoriesDialogResult.detachCategory();
     }
 
     return null; // Dialog was cancelled or no selection (or empty new category name)
@@ -191,26 +209,38 @@ class CategoriesDialogResult {
   final Category? existingCategory;
   final String? newCategoryName;
   final bool isNewCategory;
+  final bool detachCategory;
 
   const CategoriesDialogResult._({
     this.existingCategory,
     this.newCategoryName,
     required this.isNewCategory,
+    required this.detachCategory,
   });
 
   /// Result for when an existing category is selected
   factory CategoriesDialogResult.existingCategory(Category category) {
     return CategoriesDialogResult._(
-      existingCategory: category,
-      isNewCategory: false,
+        existingCategory: category,
+        isNewCategory: false,
+        detachCategory: false
     );
   }
 
   /// Result for when a new category name is provided
   factory CategoriesDialogResult.newCategory(String categoryName) {
     return CategoriesDialogResult._(
-      newCategoryName: categoryName,
-      isNewCategory: true,
+        newCategoryName: categoryName,
+        isNewCategory: true,
+        detachCategory: false
+    );
+  }
+
+  /// Result for when a new category name is provided
+  factory CategoriesDialogResult.detachCategory() {
+    return CategoriesDialogResult._(
+        isNewCategory: false,
+        detachCategory: true
     );
   }
 }

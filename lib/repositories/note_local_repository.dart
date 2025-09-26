@@ -267,25 +267,12 @@ class NoteLocalRepository {
 
     final Map<String, dynamic> noteData = { 'updated_at': updatedAt };
 
-    if (title != null) {
-      noteData['title'] = title;
-    }
+    if (title != null) noteData['title'] = title;
+    if (content != null) noteData['content'] = content;
+    if (remoteId != null) noteData['remote_id'] = remoteId;
+    if (isDeleted != null) noteData['is_deleted'] = isDeleted;
 
-    if (content != null) {
-      noteData['content'] = content;
-    }
-
-    if (categoryId != null) {
-      noteData['category_id'] = categoryId;
-    }
-
-    if (remoteId != null) {
-      noteData['remote_id'] = remoteId;
-    }
-
-    if (isDeleted != null) {
-      noteData['is_deleted'] = isDeleted;
-    }
+    noteData['category_id'] = categoryId;
 
     try {
       final updatedRows = await database.update(
