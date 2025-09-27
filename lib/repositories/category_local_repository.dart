@@ -14,7 +14,7 @@ class CategoryLocalRepository {
       final List<Map<String, dynamic>> categoriesFromDb = await database.query(
         'Categories',
         where: 'is_deleted != 1',
-        orderBy: 'order_index ASC, name ASC',
+        orderBy: 'order_index ASC',
       );
 
       return categoriesFromDb

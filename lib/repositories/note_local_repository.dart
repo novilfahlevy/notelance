@@ -13,7 +13,7 @@ class NoteLocalRepository {
       final List<Map<String, dynamic>> notesFromDb = await database.query(
         'Notes',
         where: 'is_deleted = 0',
-        orderBy: 'updated_at DESC',
+        orderBy: 'title ASC',
       );
 
       return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
@@ -65,7 +65,7 @@ class NoteLocalRepository {
       final List<Map<String, dynamic>> notesFromDb = await database.query(
         'Notes',
         where: 'category_id IS NULL AND is_deleted = 0',
-        orderBy: 'updated_at DESC',
+        orderBy: 'title ASC',
       );
 
       return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
@@ -155,7 +155,7 @@ class NoteLocalRepository {
         'Notes',
         where: 'category_id = ? AND is_deleted = 0',
         whereArgs: [categoryId],
-        orderBy: 'updated_at DESC',
+        orderBy: 'title ASC',
       );
 
       return notesFromDb.map((noteJson) => Note.fromJson(noteJson)).toList();
