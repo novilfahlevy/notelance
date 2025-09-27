@@ -26,6 +26,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
   late List<Category> _categories;
   final CategoryLocalRepository _categoryLocalRepository = CategoryLocalRepository();
 
+  bool _isSomethingChanged = false;
+
   @override
   void initState() {
     super.initState();
@@ -57,7 +59,10 @@ class _CategoriesPageState extends State<CategoriesPage> {
     try {
       final category = await _categoryLocalRepository.create(name: name);
 
-      setState(() => _categories..add(category)..sort((a, b) => a.orderIndex.compareTo(b.orderIndex)));
+      setState(() {
+        _categories..add(category)..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+        _isSomethingChanged = true;
+      });
 
       _showSnackBar('Berhasil menambah kategori.', Colors.green);
     } catch (e) {
@@ -76,7 +81,10 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
       setState(() {
         final idx = _categories.indexWhere((c) => c.id == category.id);
-        if (idx != -1) _categories[idx] = _categories[idx].copyWith(name: newName);
+        if (idx != -1) {
+          _categories[idx] = _categories[idx].copyWith(name: newName);
+          _isSomethingChanged = true;
+        }
       });
       _showSnackBar('Berhasil mengedit kategori.', Colors.green);
     } catch (e) {
@@ -95,7 +103,10 @@ class _CategoriesPageState extends State<CategoriesPage> {
 
       await _categoryLocalRepository.delete(category.id!);
 
-      setState(() => _categories.removeWhere((c) => c.id == category.id));
+      setState(() {
+        _categories.removeWhere((c) => c.id == category.id);
+        _isSomethingChanged = true;
+      });
 
       _showSnackBar('Kategori berhasil dihapus.', Colors.green);
     } catch (e) {
@@ -113,6 +124,8 @@ class _CategoriesPageState extends State<CategoriesPage> {
       for (int i = 0; i < _categories.length; i++) {
         _categories[i] = _categories[i].copyWith(orderIndex: i);
       }
+
+      _isSomethingChanged = true;
     });
 
     try {
@@ -225,7 +238,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
       body: PopScope(
         canPop: true,
         onPopInvokedWithResult: (didPop, _) {
-          if (context.mounted && didPop) context.read<CategoriesNotifier>().reloadCategories();
+          if (context.mounted && didPop && _isSomethingChanged) context.read<CategoriesNotifier>().reloadCategories();
         },
         child: _categories.isEmpty
             ? Center(
