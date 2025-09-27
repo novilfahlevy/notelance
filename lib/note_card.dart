@@ -14,6 +14,11 @@ class NoteCard extends StatelessWidget {
     required this.formatDate,
   });
 
+  String _trimEmptySpaceAtTheEnd(String htmlContent) {
+    final RegExp regex = RegExp(r'(\s|<br>\s*|\n)+$', caseSensitive: false);
+    return htmlContent.replaceAll(regex, '');
+  }
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
@@ -46,7 +51,7 @@ class NoteCard extends StatelessWidget {
               focusNode: FocusNode(),
               selectionControls: MaterialTextSelectionControls(),
               child: Html(
-                data: note.content!,
+                data: _trimEmptySpaceAtTheEnd(note.content!),
                 style: {
                   "body": Style(
                     color: onSurfaceColor, // Use theme text color
@@ -66,10 +71,9 @@ class NoteCard extends StatelessWidget {
                 },
               ),
             ),
+            const SizedBox(height: 15),
             Divider(color: theme.dividerColor.withOpacity(0.5), height: 0, thickness: 0.5), // Use theme divider color
-            const SizedBox(
-              height: 15,
-            ),
+            const SizedBox(height: 15),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -77,7 +81,7 @@ class NoteCard extends StatelessWidget {
                   formatDate(DateTime.parse(note.updatedAt!)),
                   style: TextStyle(
                     fontSize: 12,
-                    color: onSurfaceColorMuted, // Use theme muted text color
+                    color: onSurfaceColorMuted,
                   ),
                 ),
                 InkWell(
