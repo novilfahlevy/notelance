@@ -37,11 +37,10 @@ class NoteCard extends StatelessWidget {
                 style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 24,
-                    color: onSurfaceColor), // Use theme text color
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                    color: onSurfaceColor
+                ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 20),
             ],
             SelectableRegion(
               focusNode: FocusNode(),
