@@ -61,12 +61,6 @@ class _MainPageState extends State<MainPage> {
     super.initState();
 
     _randomKey = DateTime.now().toUtc().microsecondsSinceEpoch.toString();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 500), () {
-        setState(() => _opacity = 1.0);
-      });
-    });
   }
 
   @override
@@ -246,6 +240,7 @@ class _MainPageState extends State<MainPage> {
       }
 
       setState(() => _mappedNotes = mappedNotes);
+      Future.delayed(const Duration(milliseconds: 300), () => setState(() => _opacity = 1.0));
     } catch (e) {
       logger.e('Error loading notes: ${e.toString()}');
     }
@@ -296,7 +291,7 @@ class _MainPageState extends State<MainPage> {
         ),
         body: AnimatedOpacity(
           opacity: _opacity,
-          duration: const Duration(microseconds: 500),
+          duration: const Duration(milliseconds: 300),
           child: TabBarView(
             children: [
               NotesPage(
