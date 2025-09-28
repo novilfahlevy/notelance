@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
-import 'package:notelance/repositories/note_local_repository.dart'; // Added
+import 'package:notelance/repositories/note_local_repository.dart';
 import 'package:notelance/models/note.dart';
-import 'package:notelance/note_editor_page.dart';
+import 'package:notelance/pages/note_editor_page.dart';
 import 'package:flutter_html/flutter_html.dart';
 
 var logger = Logger();

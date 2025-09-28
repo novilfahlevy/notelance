@@ -5,17 +5,17 @@ import 'package:logger/logger.dart';
 
 import 'package:path_provider/path_provider.dart';
 
-class LocalDatabaseService {
-  static LocalDatabaseService? _instance;
+class LocalDatabase {
+  static LocalDatabase? _instance;
   static Database? _database;
   static final Logger _logger = Logger();
 
   /// Private constructor
-  LocalDatabaseService._();
+  LocalDatabase._();
 
   /// Singleton pattern
-  static LocalDatabaseService get instance {
-    _instance ??= LocalDatabaseService._();
+  static LocalDatabase get instance {
+    _instance ??= LocalDatabase._();
     return _instance!;
   }
 
@@ -173,4 +173,4 @@ class LocalDatabaseService {
 
 // Backward compatibility - provide access to the database instance
 // This allows existing code to work with minimal changes
-LocalDatabaseService get localDatabase => LocalDatabaseService.instance;
+LocalDatabase get localDatabase => LocalDatabase.instance;

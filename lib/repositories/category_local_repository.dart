@@ -1,5 +1,5 @@
 import 'package:logger/logger.dart';
-import 'package:notelance/sqflite.dart';
+import 'package:notelance/local_database.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:notelance/models/category.dart';
 
@@ -7,7 +7,7 @@ var logger = Logger();
 
 class CategoryLocalRepository {
   Future<List<Category>> get() async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -27,7 +27,7 @@ class CategoryLocalRepository {
   }
 
   Future<Category?> getByName(String name) async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -47,7 +47,7 @@ class CategoryLocalRepository {
   }
 
   Future<Category?> getById(int id) async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -67,7 +67,7 @@ class CategoryLocalRepository {
   }
 
   Future<Category?> getByRemoteId(int remoteId) async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -91,7 +91,7 @@ class CategoryLocalRepository {
     int? orderIndex,
     int? remoteId
   }) async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -121,7 +121,7 @@ class CategoryLocalRepository {
   }
 
   Future<int> _getNextOrder() async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -146,7 +146,7 @@ class CategoryLocalRepository {
         String? updatedAt
       }
   ) async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -198,7 +198,7 @@ class CategoryLocalRepository {
   }
 
   Future<void> renewOrders(List<Category> categories) async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -226,7 +226,7 @@ class CategoryLocalRepository {
   }
 
   Future<void> delete(int categoryId) async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -260,7 +260,7 @@ class CategoryLocalRepository {
   }
 
   Future<void> hardDelete(int id) async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -291,7 +291,7 @@ class CategoryLocalRepository {
   }
 
   Future<List<Category>> getWithTrashed() async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {
@@ -308,7 +308,7 @@ class CategoryLocalRepository {
   }
 
   Future<int> getNotesCount(int categoryId) async {
-    final database = LocalDatabaseService.instance.database;
+    final database = LocalDatabase.instance.database;
     if (database == null) throw Exception('Database not initialized');
 
     try {

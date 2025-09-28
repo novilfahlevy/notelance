@@ -1,13 +1,18 @@
+// Flutter framework
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:notelance/models/category.dart';
-import 'package:notelance/repositories/category_local_repository.dart';
-import 'package:notelance/notifiers/categories_notifier.dart';
+
+// Third-party packages
 import 'package:logger/logger.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+
+// Local project imports
+import 'package:notelance/models/category.dart';
+import 'package:notelance/notifiers/main_page_notifier.dart';
+import 'package:notelance/repositories/category_local_repository.dart';
 
 var logger = Logger();
 
@@ -32,23 +37,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
   void initState() {
     super.initState();
     _categories = List.from(widget.categories)..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
-  }
-
-  /// ----------------------
-  /// Internet Connectivity
-  /// ----------------------
-  Future<bool> _hasInternetConnection() async {
-    if (Platform.environment.containsKey('VERCEL') || kIsWeb) return true;
-
-    if (Platform.isAndroid || Platform.isIOS || Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
-      try {
-        final result = await Connectivity().checkConnectivity();
-        return result.first != ConnectivityResult.none;
-      } catch (e) {
-        logger.e('Error checking connectivity: $e');
-      }
-    }
-    return false;
   }
 
   /// ----------------------
@@ -238,7 +226,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
       body: PopScope(
         canPop: true,
         onPopInvokedWithResult: (didPop, _) {
-          if (context.mounted && didPop && _isSomethingChanged) context.read<CategoriesNotifier>().reloadCategories();
+          if (context.mounted && didPop && _isSomethingChanged) context.read<MainPageNotifier>().reloadMainPage();
         },
         child: _categories.isEmpty
             ? Center(

@@ -1,73 +1,43 @@
+// Flutter framework
 import 'package:flutter/material.dart';
+
+// Third-party packages
+import 'package:logger/logger.dart';
+
+// Local project imports
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
-import 'package:notelance/note_card.dart';
-import 'package:notelance/repositories/note_local_repository.dart'; // Added
-import 'package:notelance/note_editor_page.dart';
-import 'package:logger/logger.dart';
+import 'package:notelance/pages/components/note_card.dart';
+import 'package:notelance/pages/note_editor_page.dart';
 
 var logger = Logger();
 
 class NotesPage extends StatefulWidget {
-  const NotesPage({super.key, this.category});
+  const NotesPage({
+    super.key,
+    required this.category,
+    required this.notes,
+    required this.loadNotes
+  });
 
   final Category? category;
+  final List<Note> notes;
+  final Future<void> Function() loadNotes;
 
   @override
   State<NotesPage> createState() => _NotesPageState();
 }
 
-class _NotesPageState extends State<NotesPage>
-    with AutomaticKeepAliveClientMixin {
-  List<Note> _notes = [];
-  bool _isLoading = true;
-  final NoteLocalRepository _noteRepository = NoteLocalRepository(); // Changed
-
+class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadNotes());
-  }
-
-  Future<void> _loadNotes() async {
-    if (!mounted) return;
-
-    // Changed: Removed _databaseService.isInitialized check
-
-    setState(() => _isLoading = true);
-
-    try {
-      late List<Note> notes;
-
-      if (widget.category != null) {
-        // Changed: Used _noteRepository
-        notes = await _noteRepository.getByCategory(widget.category!.id!);
-      } else {
-        // Changed: Used _noteRepository
-        notes = await _noteRepository.getUncategorized();
-      }
-
-      setState(() {
-        _notes = notes;
-        _isLoading = false;
-      });
-    } catch (e) {
-      logger.e('Error loading notes: ${e.toString()}');
-      setState(() => _isLoading = false);
-    }
-  }
 
   void _goToNoteEditor(Note note) {
     Navigator.pushNamed(
       context,
       NoteEditorPage.path,
       arguments: note,
-    ).then((_) {
-      _loadNotes();
-    });
+    ).then((_) => widget.loadNotes());
   }
 
   String _formatDate(DateTime dateTime) {
@@ -99,17 +69,9 @@ class _NotesPageState extends State<NotesPage>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(
-          color: colorScheme.primary,
-        ),
-      );
-    }
-
-    if (_notes.isEmpty) {
+    if (widget.notes.isEmpty) {
       return RefreshIndicator(
-        onRefresh: _loadNotes,
+        onRefresh: widget.loadNotes,
         color: colorScheme.primary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -143,18 +105,18 @@ class _NotesPageState extends State<NotesPage>
     }
 
     return RefreshIndicator(
-      onRefresh: _loadNotes,
+      onRefresh: widget.loadNotes,
       color: colorScheme.primary,
       child: ListView.separated(
         padding: const EdgeInsets.all(10),
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: _notes.length,
+        itemCount: widget.notes.length,
         itemBuilder: (context, index) {
-          if (index >= _notes.length - 1) {
+          if (index >= widget.notes.length - 1) {
             return Column(
               children: [
                 NoteCard(
-                  note: _notes[index],
+                  note: widget.notes[index],
                   onEdit: _goToNoteEditor,
                   formatDate: _formatDate,
                 ),
@@ -164,7 +126,7 @@ class _NotesPageState extends State<NotesPage>
           }
 
           return NoteCard(
-            note: _notes[index],
+            note: widget.notes[index],
             onEdit: _goToNoteEditor,
             formatDate: _formatDate,
           );

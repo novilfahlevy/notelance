@@ -1,25 +1,22 @@
-import 'dart:io' show Platform;
-
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:delta_to_html/delta_to_html.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+// Flutter framework
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+// Third-party packages
+import 'package:delta_to_html/delta_to_html.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_quill_delta_from_html/flutter_quill_delta_from_html.dart';
 import 'package:logger/logger.dart';
-import 'package:notelance/categories_dialog.dart';
-import 'package:notelance/config.dart';
-import 'package:notelance/delete_note_dialog.dart';
+import 'package:provider/provider.dart';
+
+// Local project imports
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
-import 'package:notelance/notifiers/categories_notifier.dart';
+import 'package:notelance/notifiers/main_page_notifier.dart';
+import 'package:notelance/pages/components/categories_dialog.dart';
+import 'package:notelance/pages/components/delete_note_dialog.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
-import 'package:notelance/repositories/note_local_repository.dart'; // Added
-import 'package:notelance/responses/note_editor_response.dart'; // Added
-import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:notelance/repositories/note_local_repository.dart';
 
 var logger = Logger();
 
@@ -521,7 +518,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Future<void> _handleBackPressed() async {
     final shouldPop = await _askExitConfirmation();
     if (shouldPop && mounted) {
-      if (_isSaved) context.read<CategoriesNotifier>().reloadCategories();
+      if (_isSaved) context.read<MainPageNotifier>().reloadMainPage();
       Navigator.of(context).pop();
     }
   }

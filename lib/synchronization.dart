@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
 import 'package:dio/dio.dart';
 import 'package:notelance/responses/synchronization_response.dart';
-import 'package:notelance/sqflite.dart';
+import 'package:notelance/local_database.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
 import 'package:notelance/repositories/note_local_repository.dart';
 import 'package:notelance/models/category.dart';
@@ -37,7 +37,7 @@ void isolateEntry(SynchronizationIsolateMessage message) async {
     BackgroundIsolateBinaryMessenger.ensureInitialized(message.rootIsolateToken);
 
     /// Re-initialize SQFLite
-    await LocalDatabaseService.instance.initialize(
+    await LocalDatabase.instance.initialize(
         successMessage: 'Database successfully initialized in the synchronization worker.'
     );
 
