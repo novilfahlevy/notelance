@@ -291,7 +291,7 @@ class _MainPageState extends State<MainPage> {
         ),
         body: AnimatedOpacity(
           opacity: _opacity,
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 200),
           child: TabBarView(
             children: [
               NotesPage(
