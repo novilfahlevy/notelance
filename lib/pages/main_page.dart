@@ -221,7 +221,8 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  /// Notes mapped by its category
+  /// Notes mapped by its category.
+  /// The 'Umum' category has the '0' key.
   Map<int, List<Note>> _mappedNotes = {};
 
   Future<void> _loadNotes() async {
