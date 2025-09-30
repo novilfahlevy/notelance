@@ -1,8 +1,4 @@
 // Flutter framework
-import 'dart:io';
-
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,7 +7,7 @@ import 'package:logger/logger.dart';
 
 // Local project imports
 import 'package:notelance/models/category.dart';
-import 'package:notelance/notifiers/main_page_notifier.dart';
+import 'package:notelance/view_models/main_page_view_model.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
 
 var logger = Logger();
@@ -221,12 +217,23 @@ class _CategoriesPageState extends State<CategoriesPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Kelola Kategori'),
-        actions: [IconButton(icon: const Icon(Icons.add), onPressed: () => _showCategoryDialog())],
+        actions: [
+          IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () => _showCategoryDialog()
+          )
+        ],
       ),
       body: PopScope(
-        canPop: true,
+        canPop: false,
         onPopInvokedWithResult: (didPop, _) {
-          if (context.mounted && didPop && _isSomethingChanged) context.read<MainPageNotifier>().reloadMainPage();
+          if (!didPop) {
+            if (_isSomethingChanged) {
+              Navigator.of(context).pop<List<Category>>(_categories);
+            } else {
+              Navigator.of(context).pop(null);
+            }
+          }
         },
         child: _categories.isEmpty
             ? Center(

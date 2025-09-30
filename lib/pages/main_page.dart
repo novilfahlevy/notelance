@@ -1,15 +1,13 @@
 // Dart core libraries
-import 'dart:io';
 import 'dart:isolate';
 import 'dart:ui';
 
 // Flutter framework
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 // Third-party packages
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:logger/logger.dart';
+import 'package:notelance/helpers.dart';
 import 'package:notelance/repositories/note_local_repository.dart';
 import 'package:provider/provider.dart';
 
@@ -20,11 +18,12 @@ import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/pages/note_editor_page.dart';
 import 'package:notelance/pages/notes_page.dart';
-import 'package:notelance/notifiers/main_page_notifier.dart';
+import 'package:notelance/view_models/main_page_view_model.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
 import 'package:notelance/pages/search_page.dart';
 import 'package:notelance/local_database.dart';
 import 'package:notelance/synchronization.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 var logger = Logger();
 
@@ -49,6 +48,10 @@ class _MainPageState extends State<MainPage> {
   final TextEditingController _searchController = TextEditingController();
   List<Category> _categories = [];
 
+  /// Notes mapped by its category.
+  /// The 'Umum' category has the '0' key.
+  Map<int, List<Note>> _mappedNotes = {};
+
   /// This key is used to uniquely identify NotesPage widgets.
   /// So if this key is changed, those notes pages would be re-rendered.
   late String _randomKey;
@@ -58,26 +61,18 @@ class _MainPageState extends State<MainPage> {
     super.initState();
 
     _randomKey = DateTime.now().toUtc().microsecondsSinceEpoch.toString();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _spawnSynchronizationIsolate());
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    final mainPageNotifier = context.watch<MainPageNotifier>();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mainPageNotifier.shouldReload) {
-        _loadCategories().then((_) => _loadNotes());
-        mainPageNotifier.shouldReload = false;
-      }
-
-      _spawnSynchronizationIsolate();
-    });
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _spawnSynchronizationIsolate() async {
-    if (await _hasInternetConnection()) {
+    if (await hasInternetConnection()) {
       setState(() {
         _isSyncing = true;
         _isSyncSuccess = null; // Reset sync status
@@ -138,20 +133,6 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-  Future<bool> _hasInternetConnection() async {
-    if (Platform.environment.containsKey('VERCEL') || kIsWeb) return true;
-
-    if (Platform.isAndroid || Platform.isIOS || Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
-      try {
-        final result = await Connectivity().checkConnectivity();
-        return result.first != ConnectivityResult.none;
-      } catch (e) {
-        logger.e('Error checking connectivity: $e');
-      }
-    }
-    return false;
-  }
-
   Future<void> _loadCategories() async {
     try {
       final categoryLocalRepository = CategoryLocalRepository();
@@ -162,26 +143,78 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-  void _openNoteEditorDialog(BuildContext context) async {
-    Navigator.pushNamed(context, NoteEditorPage.path);
+  Future<void> _loadNotes() async {
+    if (!mounted) return;
+
+    try {
+      final Map<int, List<Note>> mappedNotes = {};
+
+      mappedNotes[0] = await _noteRepository.getUncategorized();
+
+      for (final Category category in _categories) {
+        final List<Note> notes = await _noteRepository.getByCategory(category.id!);
+        mappedNotes[category.id!] = notes;
+      }
+
+      setState(() => _mappedNotes = mappedNotes);
+    } catch (e) {
+      logger.e('Error loading notes: ${e.toString()}');
+    }
   }
 
-  void _showCategoriesPage(BuildContext context) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => CategoriesPage(categories: _categories),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          const curve = Curves.ease;
+  void _showCategoriesPage(BuildContext context) async {
+    try {
+      final List<Category>? newCategories = await Navigator.push<List<Category>?>(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => CategoriesPage(categories: _categories),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            const begin = Offset(1.0, 0.0);
+            const end = Offset.zero;
+            const curve = Curves.ease;
 
-          final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
 
-          return SlideTransition(position: animation.drive(tween), child: child);
-        },
-      ),
-    );
+            return SlideTransition(position: animation.drive(tween), child: child);
+          },
+        ),
+      );
+
+      if (newCategories != null) _reloadPage(notes: false);
+    } on Exception catch (exception, stackTrace) {
+      Sentry.captureException(exception, stackTrace: stackTrace);
+      logger.e('Error when returned back from categories page.', error: exception, stackTrace: stackTrace);
+    }
+  }
+
+  void _openNoteEditorDialog(BuildContext context) async {
+    try {
+      final Note? newNote = await Navigator.push<Note?>(
+        context,
+        MaterialPageRoute<Note?>(builder: (_) => const NoteEditorPage()),
+      );
+
+      if (newNote != null) _reloadPage();
+    } on Exception catch (exception, stackTrace) {
+      Sentry.captureException(exception, stackTrace: stackTrace);
+      logger.e('Error when returned back from note editor (creating) page.', error: exception, stackTrace: stackTrace);
+    }
+  }
+
+  void _reloadPage({
+    bool categories = true,
+    bool notes = true,
+    bool sync = true
+  }) {
+    if (categories) {
+      _loadCategories().then((_) {
+        if (notes) _loadNotes();
+      });
+    } else {
+      if (notes) _loadNotes();
+    }
+
+    if (sync) _spawnSynchronizationIsolate();
   }
 
   void _showSearchPage(context) {
@@ -221,35 +254,6 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  /// Notes mapped by its category.
-  /// The 'Umum' category has the '0' key.
-  Map<int, List<Note>> _mappedNotes = {};
-
-  Future<void> _loadNotes() async {
-    if (!mounted) return;
-
-    try {
-      final Map<int, List<Note>> mappedNotes = {};
-
-      mappedNotes[0] = await _noteRepository.getUncategorized();
-
-      for (final Category category in _categories) {
-        final List<Note> notes = await _noteRepository.getByCategory(category.id!);
-        mappedNotes[category.id!] = notes;
-      }
-
-      setState(() => _mappedNotes = mappedNotes);
-    } catch (e) {
-      logger.e('Error loading notes: ${e.toString()}');
-    }
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     // Determine FAB color based on theme
@@ -259,6 +263,7 @@ class _MainPageState extends State<MainPage> {
     final fabForegroundColor = Theme.of(context).brightness == Brightness.dark
         ? Colors.black // Dark theme FAB icon color
         : Colors.white; // Light theme FAB icon color (your original)
+
 
 
     return DefaultTabController(
@@ -293,14 +298,16 @@ class _MainPageState extends State<MainPage> {
               key: ValueKey('notes_page_general_$_randomKey'),
               category: null,
               notes: _mappedNotes.containsKey(0) ? _mappedNotes[0]! : [],
-              loadNotes: _loadNotes,
+              onRefreshNotes: _loadNotes,
+              onBackFromEditorPage: () async => _reloadPage(),
             ),
             ..._categories.map((Category category) {
               return NotesPage(
                 key: ValueKey('notes_page_${category.id}_${category.orderIndex}_$_randomKey'),
                 category: category,
                 notes: _mappedNotes.containsKey(category.id) ? _mappedNotes[category.id]! : [],
-                loadNotes: _loadNotes,
+                onRefreshNotes: _loadNotes,
+                onBackFromEditorPage: () async => _reloadPage(),
               );
             }),
           ],

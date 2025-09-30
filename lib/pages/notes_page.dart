@@ -9,6 +9,7 @@ import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/pages/components/note_card.dart';
 import 'package:notelance/pages/note_editor_page.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 var logger = Logger();
 
@@ -17,12 +18,14 @@ class NotesPage extends StatefulWidget {
     super.key,
     required this.category,
     required this.notes,
-    required this.loadNotes
+    required this.onRefreshNotes,
+    required this.onBackFromEditorPage
   });
 
   final Category? category;
   final List<Note> notes;
-  final Future<void> Function() loadNotes;
+  final Future<void> Function() onRefreshNotes;
+  final Future<void> Function() onBackFromEditorPage;
 
   @override
   State<NotesPage> createState() => _NotesPageState();
@@ -32,12 +35,20 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
   @override
   bool get wantKeepAlive => true;
 
-  void _goToNoteEditor(Note note) {
-    Navigator.pushNamed(
-      context,
-      NoteEditorPage.path,
-      arguments: note,
-    ).then((_) => widget.loadNotes());
+  void _goToNoteEditor(Note note) async {
+    try {
+      final Note? newNote = await Navigator.push<Note?>(
+        context,
+        MaterialPageRoute<Note?>(
+            builder: (_) => const NoteEditorPage(),
+            settings: RouteSettings(arguments: note)
+        ),
+      );
+      if (newNote != null) widget.onBackFromEditorPage();
+    } on Exception catch (exception, stackTrace) {
+      Sentry.captureException(exception, stackTrace: stackTrace);
+      logger.e('Error when returned back from note editor (updating) page.', error: exception, stackTrace: stackTrace);
+    }
   }
 
   String _formatDate(DateTime dateTime) {
@@ -71,7 +82,7 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
 
     if (widget.notes.isEmpty) {
       return RefreshIndicator(
-        onRefresh: widget.loadNotes,
+        onRefresh: widget.onRefreshNotes,
         color: colorScheme.primary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -105,7 +116,7 @@ class _NotesPageState extends State<NotesPage> with AutomaticKeepAliveClientMixi
     }
 
     return RefreshIndicator(
-      onRefresh: widget.loadNotes,
+      onRefresh: widget.onRefreshNotes,
       color: colorScheme.primary,
       child: ListView.separated(
         padding: const EdgeInsets.all(10),

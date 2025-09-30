@@ -12,8 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 // Local project imports
 import 'package:notelance/config.dart';
 import 'package:notelance/pages/main_page.dart';
-import 'package:notelance/pages/note_editor_page.dart';
-import 'package:notelance/notifiers/main_page_notifier.dart';
+import 'package:notelance/view_models/main_page_view_model.dart';
 import 'package:notelance/pages/search_page.dart';
 import 'package:notelance/local_database.dart';
 
@@ -52,7 +51,7 @@ class Notelance extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => MainPageNotifier(),
+      create: (_) => MainPageViewModel(),
       child: MaterialApp(
           title: 'Notelance',
           debugShowCheckedModeBanner: false,
@@ -102,7 +101,6 @@ class Notelance extends StatelessWidget {
 
           routes: {
             MainPage.path: (_) => MainPage(),
-            NoteEditorPage.path: (_) => NoteEditorPage(),
             SearchPage.path: (_) => SearchPage()
           },
 

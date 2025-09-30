@@ -12,7 +12,7 @@ import 'package:provider/provider.dart';
 // Local project imports
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
-import 'package:notelance/notifiers/main_page_notifier.dart';
+import 'package:notelance/view_models/main_page_view_model.dart';
 import 'package:notelance/pages/components/categories_dialog.dart';
 import 'package:notelance/pages/components/delete_note_dialog.dart';
 import 'package:notelance/repositories/category_local_repository.dart';
@@ -404,16 +404,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
 
     try {
-      // Changed: Used _noteRepository
       final Note createdNote = await _noteRepository.create(
         title: _note!.title,
         content: _note!.content!,
         categoryId: _note!.categoryId,
         remoteId: _note!.remoteId
       );
-      setState(() {
-        _note = _note!.copyWith(id: createdNote.id);
-      });
+      setState(() => _note = _note!.copyWith(id: createdNote.id, categoryId: _note!.categoryId));
       logger.d('New note saved with ID: ${createdNote.id}');
     } catch (e) {
       logger.e('Error creating note in local database: $e');
@@ -518,8 +515,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   Future<void> _handleBackPressed() async {
     final shouldPop = await _askExitConfirmation();
     if (shouldPop && mounted) {
-      if (_isSaved) context.read<MainPageNotifier>().reloadMainPage();
-      Navigator.of(context).pop();
+      if (_isSaved) {
+        Navigator.of(context).pop<Note>(_note);
+      } else {
+        Navigator.of(context).pop(null);
+      }
     }
   }
 
