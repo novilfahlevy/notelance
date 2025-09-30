@@ -53,9 +53,6 @@ class _MainPageState extends State<MainPage> {
   /// So if this key is changed, those notes pages would be re-rendered.
   late String _randomKey;
 
-  /// The opacity used to animate (fade in) the notes
-  double _opacity = 0.0;
-
   @override
   void initState() {
     super.initState();
@@ -224,6 +221,7 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
+  /// Notes mapped by its category
   Map<int, List<Note>> _mappedNotes = {};
 
   Future<void> _loadNotes() async {
@@ -240,7 +238,6 @@ class _MainPageState extends State<MainPage> {
       }
 
       setState(() => _mappedNotes = mappedNotes);
-      Future.delayed(const Duration(milliseconds: 300), () => setState(() => _opacity = 1.0));
     } catch (e) {
       logger.e('Error loading notes: ${e.toString()}');
     }
@@ -289,27 +286,23 @@ class _MainPageState extends State<MainPage> {
             ],
           ),
         ),
-        body: AnimatedOpacity(
-          opacity: _opacity,
-          duration: const Duration(milliseconds: 200),
-          child: TabBarView(
-            children: [
-              NotesPage(
-                key: ValueKey('notes_page_general_$_randomKey'),
-                category: null,
-                notes: _mappedNotes.containsKey(0) ? _mappedNotes[0]! : [],
+        body: TabBarView(
+          children: [
+            NotesPage(
+              key: ValueKey('notes_page_general_$_randomKey'),
+              category: null,
+              notes: _mappedNotes.containsKey(0) ? _mappedNotes[0]! : [],
+              loadNotes: _loadNotes,
+            ),
+            ..._categories.map((Category category) {
+              return NotesPage(
+                key: ValueKey('notes_page_${category.id}_${category.orderIndex}_$_randomKey'),
+                category: category,
+                notes: _mappedNotes.containsKey(category.id) ? _mappedNotes[category.id]! : [],
                 loadNotes: _loadNotes,
-              ),
-              ..._categories.map((Category category) {
-                return NotesPage(
-                    key: ValueKey('notes_page_${category.id}_${category.orderIndex}_$_randomKey'),
-                    category: category,
-                    notes: _mappedNotes.containsKey(category.id) ? _mappedNotes[category.id]! : [],
-                  loadNotes: _loadNotes,
-                );
-              }),
-            ],
-          ),
+              );
+            }),
+          ],
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _openNoteEditorDialog(context),
