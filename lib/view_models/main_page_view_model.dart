@@ -18,6 +18,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 class MainPageViewModel extends ChangeNotifier {
   final Logger _logger = Logger();
+  Logger get logger => _logger;
 
   final NoteLocalRepository _noteRepository = NoteLocalRepository();
   final CategoryLocalRepository _categoryRepository = CategoryLocalRepository();
@@ -40,49 +41,6 @@ class MainPageViewModel extends ChangeNotifier {
 
   MainPageViewModel() :
         randomKey = DateTime.now().toUtc().microsecondsSinceEpoch.toString();
-
-  void showSearchPage(context) {
-    Navigator.pushNamed(context, SearchPage.path);
-  }
-
-  void showCategoriesPage(BuildContext context) async {
-    try {
-      final List<Category>? newCategories = await Navigator.push<List<Category>?>(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => CategoriesPage(categories: categories),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            const begin = Offset(1.0, 0.0);
-            const end = Offset.zero;
-            const curve = Curves.ease;
-
-            final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-
-            return SlideTransition(position: animation.drive(tween), child: child);
-          },
-        ),
-      );
-
-      if (newCategories != null) reloadPage(notes: false);
-    } on Exception catch (exception, stackTrace) {
-      Sentry.captureException(exception, stackTrace: stackTrace);
-      _logger.e('Error when returned back from categories page.', error: exception, stackTrace: stackTrace);
-    }
-  }
-
-  void openNoteEditorDialog(BuildContext context) async {
-    try {
-      final Note? newNote = await Navigator.push<Note?>(
-        context,
-        MaterialPageRoute<Note?>(builder: (_) => const NoteEditorPage()),
-      );
-
-      if (newNote != null) reloadPage();
-    } on Exception catch (exception, stackTrace) {
-      Sentry.captureException(exception, stackTrace: stackTrace);
-      _logger.e('Error when returned back from note editor (creating) page.', error: exception, stackTrace: stackTrace);
-    }
-  }
 
   Future<void> spawnSynchronizationIsolate() async {
     if (await hasInternetConnection()) {

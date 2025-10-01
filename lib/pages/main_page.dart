@@ -1,31 +1,18 @@
-// Dart core libraries
-import 'dart:isolate';
-import 'dart:ui';
-
 // Flutter framework
 import 'package:flutter/material.dart';
 
 // Third-party packages
-import 'package:logger/logger.dart';
-import 'package:notelance/helpers.dart';
-import 'package:notelance/repositories/note_local_repository.dart';
 import 'package:provider/provider.dart';
 
 // Local project imports
 import 'package:notelance/pages/categories_page.dart';
-import 'package:notelance/config.dart';
 import 'package:notelance/models/category.dart';
 import 'package:notelance/models/note.dart';
 import 'package:notelance/pages/note_editor_page.dart';
 import 'package:notelance/pages/notes_page.dart';
 import 'package:notelance/view_models/main_page_view_model.dart';
-import 'package:notelance/repositories/category_local_repository.dart';
 import 'package:notelance/pages/search_page.dart';
-import 'package:notelance/local_database.dart';
-import 'package:notelance/synchronization.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-
-var logger = Logger();
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
@@ -45,38 +32,51 @@ class _MainPageState extends State<MainPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => mainPageViewModel.spawnSynchronizationIsolate());
   }
 
-  Widget _buildSyncStatusWidget() {
+  void _showSearchPage() {
+    Navigator.pushNamed(context, SearchPage.path);
+  }
+
+  void _showCategoriesPage() async {
     final mainPageViewModel = context.read<MainPageViewModel>();
-    return Padding(
-      padding: const EdgeInsets.only(right: 8.0),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          mainPageViewModel.isSyncing
-              ? SizedBox(
-            height: 22,
-            width: 22,
-            child: CircularProgressIndicator(strokeWidth: 3),
-          )
-              : Icon(
-            mainPageViewModel.isSyncSuccess == true ? Icons.check_circle : Icons.error,
-            color: mainPageViewModel.isSyncSuccess == true ? Colors.green : Colors.red,
-            size: 24,
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.sync, size: 24),
-            onPressed: mainPageViewModel.spawnSynchronizationIsolate,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(
-              minWidth: 24,
-              minHeight: 24,
-            ),
-            tooltip: 'Re-sync',
-          ),
-        ],
-      ),
-    );
+    try {
+      final List<Category>? newCategories = await Navigator.push<List<Category>?>(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (_, _, _) => CategoriesPage(categories: mainPageViewModel.categories),
+          transitionsBuilder: _categoriesPageTransitionBuilder,
+        ),
+      );
+
+      if (newCategories != null) mainPageViewModel.reloadPage(notes: false);
+    } on Exception catch (exception, stackTrace) {
+      Sentry.captureException(exception, stackTrace: stackTrace);
+      mainPageViewModel.logger.e('Error when returned back from categories page.', error: exception, stackTrace: stackTrace);
+    }
+  }
+
+  SlideTransition _categoriesPageTransitionBuilder(_, animation, _, child) {
+    const begin = Offset(1.0, 0.0);
+    const end = Offset.zero;
+    const curve = Curves.ease;
+
+    final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+
+    return SlideTransition(position: animation.drive(tween), child: child);
+  }
+
+  void _openNoteEditorDialog() async {
+    final mainPageViewModel = context.read<MainPageViewModel>();
+    try {
+      final Note? newNote = await Navigator.push<Note?>(
+        context,
+        MaterialPageRoute<Note?>(builder: (_) => const NoteEditorPage()),
+      );
+
+      if (newNote != null) mainPageViewModel.reloadPage();
+    } on Exception catch (exception, stackTrace) {
+      Sentry.captureException(exception, stackTrace: stackTrace);
+      mainPageViewModel.logger.e('Error when returned back from note editor (creating) page.', error: exception, stackTrace: stackTrace);
+    }
   }
 
   @override
@@ -89,14 +89,14 @@ class _MainPageState extends State<MainPage> {
         appBar: AppBar(
           title: const Text('Notelance'),
           actions: [
-            _buildSyncStatusWidget(),
+            SyncStatusIndicator(),
             IconButton(
               icon: Icon(Icons.search, size: 24,),
-              onPressed: () => mainPageViewModel.showSearchPage(context),
+              onPressed: _showSearchPage,
             ),
             IconButton(
               icon: Icon(Icons.label, size: 24),
-              onPressed: () => mainPageViewModel.showCategoriesPage(context),
+              onPressed: _showCategoriesPage,
             ),
             const SizedBox(width: 10)
           ],
@@ -126,11 +126,51 @@ class _MainPageState extends State<MainPage> {
           ],
         ),
         floatingActionButton: FloatingActionButton(
-          onPressed: () => mainPageViewModel.openNoteEditorDialog(context),
+          onPressed: _openNoteEditorDialog,
           foregroundColor: Colors.black,
           backgroundColor: Colors.amber,
           child: const Icon(Icons.add),
         ),
+      ),
+    );
+  }
+}
+
+class SyncStatusIndicator extends StatelessWidget {
+  const SyncStatusIndicator({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final mainPageViewModel = context.watch<MainPageViewModel>();
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          mainPageViewModel.isSyncing
+              ? SizedBox(
+            height: 22,
+            width: 22,
+            child: CircularProgressIndicator(strokeWidth: 3),
+          )
+              : Icon(
+            mainPageViewModel.isSyncSuccess == true ? Icons.check_circle : Icons.error,
+            color: mainPageViewModel.isSyncSuccess == true ? Colors.green : Colors.red,
+            size: 24,
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.sync, size: 24),
+            onPressed: mainPageViewModel.spawnSynchronizationIsolate,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: 24,
+              minHeight: 24,
+            ),
+            tooltip: 'Re-sync',
+          ),
+        ],
       ),
     );
   }
