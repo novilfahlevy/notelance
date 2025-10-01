@@ -384,9 +384,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       // Wait a moment for the snackbar to show, then navigate back
       await Future.delayed(const Duration(milliseconds: 500));
 
-      if (mounted) {
-        Navigator.of(context).pop(true); // Return true to indicate deletion
-      }
+      if (mounted) Navigator.of(context).pop<Note>(_note);
     } catch (e) {
       logger.e('Error deleting note: $e');
       _showErrorSnackBar('Gagal menghapus catatan: ${e.toString()}');

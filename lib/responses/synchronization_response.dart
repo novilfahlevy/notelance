@@ -158,11 +158,13 @@ class CategoriesHaveSameTimesResponse {
   final String state;
   final int clientId;
   final int remoteId;
+  final int categoryId;
 
   const CategoriesHaveSameTimesResponse({
     this.state = 'CATEGORY_IN_THE_REMOTE_IS_THE_SAME',
     required this.clientId,
     required this.remoteId,
+    required this.categoryId
   });
 
   factory CategoriesHaveSameTimesResponse.fromJson(Map<String, dynamic> json) {
@@ -170,6 +172,7 @@ class CategoriesHaveSameTimesResponse {
       state: json['state'] ?? 'CATEGORY_IN_THE_REMOTE_IS_THE_SAME',
       clientId: json['client_id'],
       remoteId: json['remote_id'],
+      categoryId: json['category_id'],
     );
   }
 
@@ -178,6 +181,7 @@ class CategoriesHaveSameTimesResponse {
       'state': state,
       'client_id': clientId,
       'remote_id': remoteId,
+      'category_id': categoryId,
     };
   }
 }

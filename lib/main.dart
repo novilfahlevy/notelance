@@ -100,7 +100,10 @@ class Notelance extends StatelessWidget {
           themeMode: ThemeMode.dark, // Set dark theme as default
 
           routes: {
-            MainPage.path: (_) => MainPage(),
+            MainPage.path: (_) => ChangeNotifierProvider<MainPageViewModel>(
+              create: (_) => MainPageViewModel(),
+              child: MainPage(),
+            ),
             SearchPage.path: (_) => SearchPage()
           },
 

@@ -311,7 +311,8 @@ class Synchronization {
           if (response.remoteId != null) {
             await _noteLocalRepository.update(localNote.id!,
               remoteId: response.remoteId,
-              updatedAt: localNote.updatedAt!
+              categoryId: localNote.categoryId,
+              updatedAt: localNote.updatedAt!,
             );
             logger.i('Updated local note ${localNote.title} with remote_id: ${response.remoteId}');
           } else {
